@@ -5,55 +5,105 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   ActivityIndicator,
   StyleSheet,
+  ScrollView,
 } from "react-native";
 
-type Message = {
-  id: string;
-  role: "user" | "bot";
-  text: string;
-};
+export default function LessonPlanScreen() {
+  // HEADER INFORMATION
+  const [school, setSchool] = useState("");
+  const [teacher, setTeacher] = useState("");
+  const [gradeLevel, setGradeLevel] = useState("");
+  const [subject, setSubject] = useState("");
+  const [quarter, setQuarter] = useState("");
+  const [week, setWeek] = useState("");
+  const [day, setDay] = useState("");
+  const [date, setDate] = useState("");
 
-export default function ChatScreen() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "bot",
-      text: "Hi! I'm your Google AI-powered chatbot. Ask me anything 🤖",
-    },
-  ]);
-  const [input, setInput] = useState("");
+  // OBJECTIVES
+  const [learningCompetencies, setLearningCompetencies] = useState("");
+
+  // CONTENT
+  const [topicTitle, setTopicTitle] = useState("");
+
+  // ADDITIONAL INFORMATION
+  const [timeAllotted, setTimeAllotted] = useState("");
+  const [resourcesAvailable, setResourcesAvailable] = useState("");
+  const [previousLesson, setPreviousLesson] = useState("");
+
+  // OUTPUT
+  const [lessonPlan, setLessonPlan] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const sendMessage = async () => {
-    const trimmed = input.trim();
-    if (!trimmed || loading) return;
+  const allRequiredFilled = [
+    school,
+    teacher,
+    gradeLevel,
+    subject,
+    quarter,
+    week,
+    day,
+    date,
+    learningCompetencies,
+    topicTitle,
+    timeAllotted,
+  ].every((v) => v.trim().length > 0);
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      text: trimmed,
-    };
+  const handleGenerate = async () => {
+    if (!allRequiredFilled || loading) return;
 
-    // Show the user's message immediately
-    setMessages((prev) => [...prev, userMessage]);
-    setInput("");
     setLoading(true);
+    setLessonPlan("");
+
+    // Build a structured description to send to the backend
+    const lessonInfo = `
+HEADER INFORMATION
+- School: ${school}
+- Teacher: ${teacher}
+- Grade Level: ${gradeLevel}
+- Subject: ${subject}
+- Quarter: ${quarter}
+- Week: ${week}
+- Day: ${day}
+- Date: ${date}
+
+OBJECTIVES
+- Learning competencies (MELCs): ${learningCompetencies}
+
+CONTENT
+- Topic / Lesson Title: ${topicTitle}
+
+ADDITIONAL INFORMATION
+- Time Allotted: ${timeAllotted}
+- Resources Available: ${resourcesAvailable || "Not specified"}
+- Previous Lesson: ${previousLesson || "Not specified"}
+    `.trim();
+
+    const prompt = `
+You are an expert ${subject} teacher. Using the information below, create a detailed and classroom-ready lesson plan.
+
+Requirements:
+- Use clear sections such as: I. Objectives, II. Subject Matter / Content, III. Learning Activities, IV. Assessment, V. Assignment/Enrichment.
+- Align the objectives with the given learning competencies (MELCs).
+- Make activities age-appropriate for Grade ${gradeLevel}.
+- Use bullet points and numbering where helpful.
+- Keep the tone professional but easy for teachers to follow.
+
+Here is the lesson information provided by the teacher:
+
+${lessonInfo}
+    `.trim();
 
     try {
       const response = await fetch("http://192.168.254.104:4000/chat", {
+        // ⚠️ Change IP/port if your backend is different
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: trimmed,
-          history: [...messages, userMessage].map((m) => ({
-            role: m.role,
-            text: m.text,
-          })),
+          message: prompt,
         }),
       });
 
@@ -62,41 +112,18 @@ export default function ChatScreen() {
       }
 
       const data = await response.json();
-
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "bot",
-        text: data.reply ?? "Sorry, I couldn't understand that.",
-      };
-
-      setMessages((prev) => [...prev, botMessage]);
+      setLessonPlan(
+        data.reply ??
+          "Sorry, I couldn't generate a lesson plan. Please try again."
+      );
     } catch (err) {
       console.error(err);
-      const errorMessage: Message = {
-        id: (Date.now() + 2).toString(),
-        role: "bot",
-        text:
-          "Oops, something went wrong talking to Google AI. Check your backend/API key.",
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      setLessonPlan(
+        "Oops, something went wrong talking to Google AI. Check your connection or try again."
+      );
     } finally {
       setLoading(false);
     }
-  };
-
-  const renderItem = ({ item }: { item: Message }) => {
-    const isUser = item.role === "user";
-    return (
-      <View
-        style={[
-          styles.messageContainer,
-          isUser ? styles.userMessage : styles.botMessage,
-        ]}
-      >
-        <Text style={styles.messageSender}>{isUser ? "You" : "Bot"}</Text>
-        <Text style={styles.messageText}>{item.text}</Text>
-      </View>
-    );
   };
 
   return (
@@ -106,43 +133,182 @@ export default function ChatScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={80}
       >
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Google AI Chatbot</Text>
-          <Text style={styles.headerSubtitle}>
-            Powered by Gemini · Single screen · Expo
-          </Text>
-        </View>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>AI Lesson Plan Generator</Text>
+            <Text style={styles.headerSubtitle}>
+              Fill in the lesson details and let Google AI generate a complete
+              lesson plan for you.
+            </Text>
+          </View>
 
-        <FlatList
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.messagesList}
-        />
+          {/* HEADER INFORMATION */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Header Information</Text>
+            <Field
+              label="School"
+              value={school}
+              onChangeText={setSchool}
+              placeholder="e.g., Sample National High School"
+            />
+            <Field
+              label="Teacher"
+              value={teacher}
+              onChangeText={setTeacher}
+              placeholder="e.g., Juan Dela Cruz"
+            />
+            <Field
+              label="Grade Level"
+              value={gradeLevel}
+              onChangeText={setGradeLevel}
+              placeholder="e.g., Grade 7"
+            />
+            <Field
+              label="Subject"
+              value={subject}
+              onChangeText={setSubject}
+              placeholder="e.g., Science"
+            />
+            <Field
+              label="Quarter"
+              value={quarter}
+              onChangeText={setQuarter}
+              placeholder="e.g., 1st Quarter"
+            />
+            <Field
+              label="Week"
+              value={week}
+              onChangeText={setWeek}
+              placeholder="e.g., Week 2"
+            />
+            <Field
+              label="Day"
+              value={day}
+              onChangeText={setDay}
+              placeholder="e.g., Day 1 (Monday)"
+            />
+            <Field
+              label="Date"
+              value={date}
+              onChangeText={setDate}
+              placeholder="e.g., September 10, 2025"
+            />
+          </View>
 
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            value={input}
-            onChangeText={setInput}
-            placeholder="Ask something..."
-            placeholderTextColor="#6b7280"
-            multiline
-          />
+          {/* OBJECTIVES */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Objectives</Text>
+            <Field
+              label="Learning competencies (MELCs)"
+              value={learningCompetencies}
+              onChangeText={setLearningCompetencies}
+              placeholder="Write or paste the MELCs here..."
+              multiline
+            />
+          </View>
+
+          {/* CONTENT */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Content</Text>
+            <Field
+              label="Topic / Lesson Title"
+              value={topicTitle}
+              onChangeText={setTopicTitle}
+              placeholder="e.g., The Structure of the Earth"
+            />
+          </View>
+
+          {/* ADDITIONAL INFORMATION */}
+          <View style={styles.card}>
+            <Text style={styles.sectionTitle}>Additional Information</Text>
+            <Field
+              label="Time Allotted"
+              value={timeAllotted}
+              onChangeText={setTimeAllotted}
+              placeholder="e.g., 60 minutes"
+            />
+            <Field
+              label="Resources Available"
+              value={resourcesAvailable}
+              onChangeText={setResourcesAvailable}
+              placeholder="e.g., textbook, projector, worksheets"
+              multiline
+            />
+            <Field
+              label="Previous Lesson"
+              value={previousLesson}
+              onChangeText={setPreviousLesson}
+              placeholder="e.g., Introduction to the Solar System"
+              multiline
+            />
+          </View>
+
+          {/* Generate Button */}
           <TouchableOpacity
-            style={[styles.sendButton, loading && styles.sendButtonDisabled]}
-            onPress={sendMessage}
-            disabled={loading}
+            style={[
+              styles.button,
+              (!allRequiredFilled || loading) && styles.buttonDisabled,
+            ]}
+            onPress={handleGenerate}
+            disabled={!allRequiredFilled || loading}
           >
             {loading ? (
               <ActivityIndicator size="small" />
             ) : (
-              <Text style={styles.sendButtonText}>Send</Text>
+              <Text style={styles.buttonText}>Generate Lesson Plan</Text>
             )}
           </TouchableOpacity>
-        </View>
+
+          {/* Output */}
+          <View style={[styles.card, { marginBottom: 32 }]}>
+            <Text style={styles.sectionTitle}>Generated Lesson Plan</Text>
+            {lessonPlan ? (
+              <Text style={styles.outputText}>{lessonPlan}</Text>
+            ) : (
+              <Text style={styles.placeholderOutput}>
+                The generated lesson plan will appear here after you click
+                "Generate Lesson Plan".
+              </Text>
+            )}
+          </View>
+        </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+// Reusable field component
+type FieldProps = {
+  label: string;
+  value: string;
+  onChangeText: (text: string) => void;
+  placeholder?: string;
+  multiline?: boolean;
+};
+
+function Field({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  multiline,
+}: FieldProps) {
+  return (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={[styles.input, multiline && styles.inputMultiline]}
+        value={value}
+        onChangeText={onChangeText}
+        placeholder={placeholder}
+        placeholderTextColor="#6b7280"
+        multiline={multiline}
+      />
+    </View>
   );
 }
 
@@ -153,7 +319,10 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 16,
+    paddingBottom: 24,
   },
   header: {
     paddingVertical: 16,
@@ -166,68 +335,69 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     fontSize: 13,
     color: "#9ca3af",
-    marginTop: 4,
+    marginTop: 6,
   },
-  messagesList: {
-    paddingBottom: 12,
-    paddingTop: 4,
-  },
-  messageContainer: {
-    maxWidth: "80%",
+  card: {
+    backgroundColor: "#020617",
     borderRadius: 16,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginVertical: 4,
-  },
-  userMessage: {
-    alignSelf: "flex-end",
-    backgroundColor: "#2563eb",
-  },
-  botMessage: {
-    alignSelf: "flex-start",
-    backgroundColor: "#111827",
+    padding: 14,
+    marginTop: 12,
     borderWidth: 1,
     borderColor: "#1f2937",
   },
-  messageSender: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#e5e7eb",
-    marginBottom: 2,
-  },
-  messageText: {
+  sectionTitle: {
     fontSize: 14,
-    color: "#f9fafb",
+    fontWeight: "700",
+    color: "#e5e7eb",
+    marginBottom: 8,
   },
-  inputRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    paddingVertical: 8,
-    columnGap: 8,
+  fieldContainer: {
+    marginBottom: 10,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#9ca3af",
+    marginBottom: 4,
   },
   input: {
-    flex: 1,
-    minHeight: 40,
-    maxHeight: 100,
-    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: "#0b1120",
+    paddingHorizontal: 10,
     paddingVertical: 8,
-    backgroundColor: "#111827",
-    borderRadius: 999,
     color: "#f9fafb",
+    fontSize: 14,
   },
-  sendButton: {
+  inputMultiline: {
+    minHeight: 70,
+    textAlignVertical: "top",
+  },
+  button: {
+    marginTop: 16,
     borderRadius: 999,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: "#10b981",
-    justifyContent: "center",
+    paddingVertical: 12,
     alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#10b981",
   },
-  sendButtonDisabled: {
-    opacity: 0.7,
+  buttonDisabled: {
+    opacity: 0.6,
   },
-  sendButtonText: {
+  buttonText: {
     color: "#ecfeff",
     fontWeight: "600",
+    fontSize: 15,
+  },
+  outputText: {
+    marginTop: 4,
+    fontSize: 14,
+    color: "#f9fafb",
+    lineHeight: 20,
+  },
+  placeholderOutput: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#6b7280",
+    fontStyle: "italic",
   },
 });

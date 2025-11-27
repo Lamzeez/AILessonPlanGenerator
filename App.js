@@ -12,14 +12,8 @@ import {
   StyleSheet,
 } from "react-native";
 
-type Message = {
-  id: string;
-  role: "user" | "bot";
-  text: string;
-};
-
-export default function ChatScreen() {
-  const [messages, setMessages] = useState<Message[]>([
+export default function App() {
+  const [messages, setMessages] = useState([
     {
       id: "1",
       role: "bot",
@@ -33,24 +27,26 @@ export default function ChatScreen() {
     const trimmed = input.trim();
     if (!trimmed || loading) return;
 
-    const userMessage: Message = {
+    const userMessage = {
       id: Date.now().toString(),
       role: "user",
       text: trimmed,
     };
 
-    // Show the user's message immediately
+    // Update UI immediately with user message
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
     setLoading(true);
 
     try {
+      // 👉 Call your backend, which will call Google AI API
       const response = await fetch("http://192.168.254.104:4000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: trimmed,
-          history: [...messages, userMessage].map((m) => ({
+          // You can send the whole history if you want:
+          history: messages.map((m) => ({
             role: m.role,
             text: m.text,
           })),
@@ -63,7 +59,7 @@ export default function ChatScreen() {
 
       const data = await response.json();
 
-      const botMessage: Message = {
+      const botMessage = {
         id: (Date.now() + 1).toString(),
         role: "bot",
         text: data.reply ?? "Sorry, I couldn't understand that.",
@@ -72,7 +68,7 @@ export default function ChatScreen() {
       setMessages((prev) => [...prev, botMessage]);
     } catch (err) {
       console.error(err);
-      const errorMessage: Message = {
+      const errorMessage = {
         id: (Date.now() + 2).toString(),
         role: "bot",
         text:
@@ -84,7 +80,7 @@ export default function ChatScreen() {
     }
   };
 
-  const renderItem = ({ item }: { item: Message }) => {
+  const renderItem = ({ item }) => {
     const isUser = item.role === "user";
     return (
       <View
@@ -93,7 +89,9 @@ export default function ChatScreen() {
           isUser ? styles.userMessage : styles.botMessage,
         ]}
       >
-        <Text style={styles.messageSender}>{isUser ? "You" : "Bot"}</Text>
+        <Text style={styles.messageSender}>
+          {isUser ? "You" : "Bot"}
+        </Text>
         <Text style={styles.messageText}>{item.text}</Text>
       </View>
     );
@@ -118,6 +116,8 @@ export default function ChatScreen() {
           keyExtractor={(item) => item.id}
           renderItem={renderItem}
           contentContainerStyle={styles.messagesList}
+          onContentSizeChange={() => {}}
+          onLayout={() => {}}
         />
 
         <View style={styles.inputRow}>
@@ -126,7 +126,6 @@ export default function ChatScreen() {
             value={input}
             onChangeText={setInput}
             placeholder="Ask something..."
-            placeholderTextColor="#6b7280"
             multiline
           />
           <TouchableOpacity
@@ -203,7 +202,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-end",
     paddingVertical: 8,
-    columnGap: 8,
+    gap: 8,
   },
   input: {
     flex: 1,

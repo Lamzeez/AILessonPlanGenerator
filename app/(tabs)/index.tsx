@@ -100,13 +100,14 @@ ${lessonInfo}
     `.trim();
 
     try {
-      const response = await fetch("http://192.168.254.104:4000/chat", {
+      const NGROK_URL = "https://unascendent-underfoot-tessa.ngrok-free.dev";
+
+      const response = await fetch(`${NGROK_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: prompt,
-        }),
+        body: JSON.stringify({ message: prompt }),
       });
+
 
       if (!response.ok) {
         throw new Error(`Server error: ${response.status}`);

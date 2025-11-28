@@ -1,15 +1,17 @@
+import * as Clipboard from "expo-clipboard"; // 👈 NEW
 import React, { useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
   SafeAreaView,
-  View,
+  ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  ActivityIndicator,
-  StyleSheet,
-  ScrollView,
+  View,
 } from "react-native";
 
 export default function LessonPlanScreen() {
@@ -99,7 +101,6 @@ ${lessonInfo}
 
     try {
       const response = await fetch("http://192.168.254.104:4000/chat", {
-        // ⚠️ Change IP/port if your backend is different
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -123,6 +124,19 @@ ${lessonInfo}
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 👇 NEW: copy-to-clipboard handler
+  const handleCopy = async () => {
+    if (!lessonPlan) return;
+
+    try {
+      await Clipboard.setStringAsync(lessonPlan);
+      Alert.alert("Copied", "Lesson plan copied to clipboard.");
+    } catch (error) {
+      console.error("Copy failed:", error);
+      Alert.alert("Error", "Failed to copy to clipboard.");
     }
   };
 
@@ -267,7 +281,18 @@ ${lessonInfo}
           <View style={[styles.card, { marginBottom: 32 }]}>
             <Text style={styles.sectionTitle}>Generated Lesson Plan</Text>
             {lessonPlan ? (
-              <Text style={styles.outputText}>{lessonPlan}</Text>
+              <>
+                <Text style={styles.outputText}>{lessonPlan}</Text>
+
+                {/* 👇 NEW: Copy button appears only when there is output */}
+                <TouchableOpacity
+                  style={styles.copyButton}
+                  onPress={handleCopy}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.copyButtonText}>Copy to Clipboard</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <Text style={styles.placeholderOutput}>
                 The generated lesson plan will appear here after you click
@@ -399,5 +424,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#6b7280",
     fontStyle: "italic",
+  },
+
+  // 👇 NEW styles for the copy button
+  copyButton: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#10b981",
+  },
+  copyButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#10b981",
   },
 });

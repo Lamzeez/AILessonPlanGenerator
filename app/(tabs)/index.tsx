@@ -87,6 +87,11 @@ export default function LessonPlanScreen() {
   const [lessonPlan, setLessonPlan] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // NEW: generation status for success message
+  const [generationStatus, setGenerationStatus] = useState<
+    "idle" | "success" | "error"
+  >("idle");
+
   // Templates & History state
   const [templates, setTemplates] = useState<LessonTemplate[]>([]);
   const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
@@ -172,6 +177,7 @@ export default function LessonPlanScreen() {
 
     setLoading(true);
     setLessonPlan("");
+    setGenerationStatus("idle");
 
     const lessonInfo = `
 HEADER INFORMATION
@@ -265,12 +271,14 @@ ${lessonInfo}
       }
 
       setLessonPlan(reply);
+      setGenerationStatus("success");
       await addHistoryEntry(reply);
     } catch (err) {
       console.error(err);
       setLessonPlan(
         "Oops, something went wrong talking to Google AI. Check your connection or try again."
       );
+      setGenerationStatus("error");
     } finally {
       setLoading(false);
     }
@@ -546,6 +554,7 @@ ${lessonInfo}
     setPlanStyle("DepEd Format (Philippines)");
     setLanguage("English");
     setLessonPlan("");
+    setGenerationStatus("idle");
   };
 
   // ---- Templates: save & apply ----
@@ -630,10 +639,11 @@ ${lessonInfo}
 
   const handleSelectHistoryItem = (item: HistoryItem) => {
     setLessonPlan(item.lessonPlan);
+    setGenerationStatus("success");
     setHistoryVisible(false);
   };
 
-  // 🔹 NEW: delete handlers for templates & history
+  // 🔹 delete handlers for templates & history
   const handleDeleteTemplate = (id: string) => {
     Alert.alert(
       "Delete template",
@@ -671,7 +681,6 @@ ${lessonInfo}
       ]
     );
   };
-
 
   return (
     <SafeAreaView style={styles.safe}>
@@ -987,6 +996,13 @@ ${lessonInfo}
             </Text>
           )}
 
+          {/* ✅ Success message after generation */}
+          {generationStatus === "success" && lessonPlan !== "" && (
+            <Text style={styles.successMessage}>
+              Your lesson plan has been generated successfully!
+            </Text>
+          )}
+
           {/* Output */}
           <View style={[styles.card, { marginBottom: 32 }]}>
             <Text style={styles.sectionTitle}>Generated Lesson Plan</Text>
@@ -1062,9 +1078,7 @@ ${lessonInfo}
                           onPress={() => handleSelectTemplate(tpl)}
                           activeOpacity={0.7}
                         >
-                          <Text style={styles.modalItemTitle}>
-                            {tpl.name}
-                          </Text>
+                          <Text style={styles.modalItemTitle}>{tpl.name}</Text>
                           <Text style={styles.modalItemSubtitle}>
                             {tpl.subject} • {tpl.gradeLevel}
                             {tpl.topicTitle
@@ -1102,7 +1116,7 @@ ${lessonInfo}
               style={StyleSheet.absoluteFill}
               onPress={() => setHistoryVisible(false)}
             />
-            <View style={styles.modalCard}>
+          <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Lesson Plan History</Text>
               <ScrollView
                 style={{ maxHeight: "70%", marginTop: 8 }}
@@ -1415,6 +1429,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#f97373",
     textAlign: "center",
+  },
+  successMessage: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#4ade80",
+    textAlign: "center",
+    fontWeight: "600",
   },
   outputText: {
     marginTop: 4,

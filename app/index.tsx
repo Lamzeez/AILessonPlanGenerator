@@ -1,6 +1,10 @@
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
+    Animated,
+    Image,
+    Modal,
+    Pressable,
     SafeAreaView,
     ScrollView,
     StyleSheet,
@@ -11,9 +15,39 @@ import {
 
 export default function WelcomeScreen() {
   const router = useRouter();
+  const [showTips, setShowTips] = useState(false);
+
+  // Animation values
+  const headerOpacity = useRef(new Animated.Value(0)).current;
+  const logoScale = useRef(new Animated.Value(0.9)).current;
+  const taglineOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    // Run when screen mounts
+    Animated.sequence([
+      Animated.parallel([
+        Animated.timing(headerOpacity, {
+          toValue: 1,
+          duration: 450,
+          useNativeDriver: true,
+        }),
+        Animated.spring(logoScale, {
+          toValue: 1,
+          friction: 6,
+          tension: 80,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(taglineOpacity, {
+        toValue: 1,
+        duration: 400,
+        delay: 80,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [headerOpacity, logoScale, taglineOpacity]);
 
   const handleGetStarted = () => {
-    // Go to your main tab screen (where the generator lives)
     router.replace("/(tabs)");
   };
 
@@ -24,23 +58,41 @@ export default function WelcomeScreen() {
         bounces={false}
         showsVerticalScrollIndicator={false}
       >
-        {/* Top "brand" area */}
-        <View style={styles.headerRow}>
-          <View style={styles.logoCircle}>
-            <Text style={styles.logoText}>LP</Text>
+        {/* Animated header with logo */}
+        <Animated.View
+          style={[
+            styles.headerCentered,
+            {
+              opacity: headerOpacity,
+              transform: [{ scale: logoScale }],
+            },
+          ]}
+        >
+          {/* Glow wrapper */}
+          <View style={styles.logoGlowWrapper}>
+            <Image
+              source={require("../assets/images/logo.png")}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
           </View>
-          <View>
-            <Text style={styles.appName}>AI Lesson Plan Generator</Text>
-            <Text style={styles.appTagline}>
-              Plan smarter, teach better, save time.
-            </Text>
-          </View>
-        </View>
+
+          <Text style={styles.appNameCentered}>AI Lesson Plan Generator</Text>
+
+          <Animated.Text
+            style={[
+              styles.appTaglineCentered,
+              { opacity: taglineOpacity },
+            ]}
+          >
+            Plan smarter, teach better, save time.
+          </Animated.Text>
+        </Animated.View>
 
         {/* Hero card */}
         <View style={styles.heroCard}>
           <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>For Teachers and Aspiring Teachers ✨</Text>
+            <Text style={styles.heroBadgeText}>For Teachers ✨</Text>
           </View>
 
           <Text style={styles.heroTitle}>
@@ -52,7 +104,6 @@ export default function WelcomeScreen() {
             structured, classroom-ready lesson plan.
           </Text>
 
-          {/* Highlight stats / benefits */}
           <View style={styles.heroRow}>
             <View style={styles.heroPill}>
               <Text style={styles.heroPillLabel}>DepEd-aligned</Text>
@@ -106,23 +157,70 @@ export default function WelcomeScreen() {
             activeOpacity={0.85}
           >
             <Text style={styles.primaryButtonText}>Get Started</Text>
+            <Text style={styles.primaryButtonSubtext}>
+              Open the AI Lesson Plan Generator
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.secondaryButton}
-            onPress={handleGetStarted}
+            onPress={() => setShowTips(true)}
             activeOpacity={0.8}
           >
             <Text style={styles.secondaryButtonText}>
-              Skip intro, go to generator →
+              View quick tips & how it works
             </Text>
           </TouchableOpacity>
 
           <Text style={styles.footerHint}>
-            You can always come back here by reopening the app.
+            You can always close and reopen the app to see this screen again.
           </Text>
         </View>
       </ScrollView>
+
+      {/* Quick Tips Modal */}
+      <Modal
+        visible={showTips}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowTips(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowTips(false)}
+          />
+
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Quick Tips</Text>
+            <Text style={styles.modalText}>
+              1. Fill in all required fields: school, teacher, grade level,
+              subject, quarter, week, day, date, MELCs, topic, time, resources,
+              and previous lesson.
+            </Text>
+            <Text style={styles.modalText}>
+              2. Choose your preferred lesson plan style and language.
+            </Text>
+            <Text style={styles.modalText}>
+              3. Tap "Generate Lesson Plan" to get a complete DepEd-style plan.
+            </Text>
+            <Text style={styles.modalText}>
+              4. Save templates to reuse your teaching setup.
+            </Text>
+            <Text style={styles.modalText}>
+              5. Export as Word/PDF for printing or editing.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowTips(false)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -153,39 +251,43 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 32,
-    paddingBottom: 32,
+    paddingTop: 45, // vertical padding from top
+    paddingBottom: 45, // vertical padding from bottom
   },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 24,
-  },
-  logoCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    backgroundColor: "#0f172a",
-    borderWidth: 1,
-    borderColor: "#22c55e",
+
+  // Centered animated header
+  headerCentered: {
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 12,
+    marginBottom: 28,
   },
-  logoText: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#bbf7d0",
+  logoGlowWrapper: {
+    padding: 0,
+    borderRadius: 12,
+    backgroundColor: "#1d4ed8", // subtle blue base
+    shadowColor: "#60a5fa",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.9,
+    shadowRadius: 18,
+    elevation: 12, // Android glow
   },
-  appName: {
-    fontSize: 18,
+  logoImage: {
+    width: 72,
+    height: 72,
+  },
+  appNameCentered: {
+    marginTop: 12,
+    fontSize: 22,
     fontWeight: "700",
     color: "#f9fafb",
+    textAlign: "center",
   },
-  appTagline: {
-    fontSize: 12,
+  appTaglineCentered: {
+    fontSize: 13,
     color: "#9ca3af",
-    marginTop: 2,
+    marginTop: 4,
+    textAlign: "center",
+    maxWidth: 260,
   },
 
   heroCard: {
@@ -300,6 +402,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#ecfeff",
   },
+  primaryButtonSubtext: {
+    fontSize: 11,
+    color: "#e0f2fe",
+    marginTop: 2,
+  },
   secondaryButton: {
     borderRadius: 999,
     borderWidth: 1,
@@ -319,5 +426,44 @@ const styles = StyleSheet.create({
     color: "#6b7280",
     textAlign: "center",
     marginTop: 4,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  modalCard: {
+    backgroundColor: "#020617",
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+  },
+  modalTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#e5e7eb",
+    marginBottom: 8,
+  },
+  modalText: {
+    fontSize: 12,
+    color: "#d1d5db",
+    marginBottom: 6,
+  },
+  modalButton: {
+    marginTop: 10,
+    borderRadius: 999,
+    backgroundColor: "#10b981",
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#ecfeff",
   },
 });

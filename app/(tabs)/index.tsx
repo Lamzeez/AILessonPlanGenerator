@@ -1,7 +1,9 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as Clipboard from "expo-clipboard";
 import * as FileSystem from "expo-file-system/legacy";
+import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
+
 import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -175,7 +177,7 @@ ${lessonInfo}
     }
   };
 
-  // 🔹 NEW: Save as Word-editable file (.rtf)
+  // 🔹 Save as Word-editable file (.rtf)
   const handleSaveAsWord = async () => {
     if (!lessonPlan) {
       Alert.alert("No content", "Generate a lesson plan first.");
@@ -237,6 +239,54 @@ ${lessonInfo}
     }
   };
 
+  // 🔹 Save as PDF via expo-print
+  const handleSaveAsPDF = async () => {
+    if (!lessonPlan) {
+      Alert.alert("No content", "Generate a lesson plan first.");
+      return;
+    }
+
+    try {
+      const escapeHtml = (text: string) =>
+        text
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+
+      const html = `
+        <html>
+          <head>
+            <meta charset="utf-8" />
+          </head>
+          <body style="font-family: -apple-system, system-ui, sans-serif; white-space: pre-wrap; font-size: 12pt; line-height: 1.4; padding: 24px;">
+            ${escapeHtml(lessonPlan).replace(/\n/g, "<br/>")}
+          </body>
+        </html>
+      `;
+
+      const { uri } = await Print.printToFileAsync({ html });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (!isAvailable) {
+        Alert.alert(
+          "PDF created",
+          `PDF file created at: ${uri}\nYou can open it with a PDF viewer.`
+        );
+        return;
+      }
+
+      await Sharing.shareAsync(uri, {
+        mimeType: "application/pdf",
+        dialogTitle: "Save or share lesson plan PDF",
+      });
+    } catch (error) {
+      console.error("Save as PDF failed:", error);
+      Alert.alert(
+        "Error",
+        "Unable to save the lesson plan as a PDF file. Please try again."
+      );
+    }
+  };
 
   // Date picker handler
   const handleDateChange = (_: any, selectedDate?: Date) => {
@@ -506,6 +556,14 @@ ${lessonInfo}
                     <Text style={styles.saveButtonText}>
                       Save as Word File
                     </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.savePdfButton}
+                    onPress={handleSaveAsPDF}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.savePdfButtonText}>Save as PDF</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -828,6 +886,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "600",
     color: "#bfdbfe",
+  },
+  savePdfButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#f97316",
+  },
+  savePdfButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#fed7aa",
   },
   dateInput: {
     borderRadius: 10,

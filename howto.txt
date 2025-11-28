@@ -1,0 +1,240 @@
+AI Lesson Plan Generator
+========================
+
+Overview
+--------
+This project is a mobile-friendly AI Lesson Plan Generator built with:
+- React Native + Expo (frontend)
+- Google Gemini API (backend, Node.js)
+- Ngrok (to expose the backend to mobile devices)
+- Google AI generates classroom-ready lesson plans based on user input
+
+The app allows teachers to:
+- Fill in lesson details (school, teacher, grade, subject, MELCs, etc.)
+- Generate a plain-text lesson plan (starting at "HEADER INFORMATION")
+- Copy the lesson plan to clipboard
+- Save the lesson plan as an editable Word file (.rtf)
+- Save the lesson plan as a PDF file (.pdf)
+
+
+Prerequisites
+-------------
+Install these on any computer where you want to run the project:
+
+1. Node.js (LTS recommended)
+   https://nodejs.org/
+
+2. npm (comes with Node.js)
+
+3. Git
+   https://git-scm.com/
+
+4. Ngrok
+   https://ngrok.com/download
+
+5. Expo CLI tooling (via npx, no global install required)
+   Expo Go app on your mobile device (Android/iOS) from the app store.
+
+
+Backend Setup (google-ai-backend)
+---------------------------------
+Directory: /google-ai-backend
+
+1) Install dependencies (run once per machine):
+
+   npm install express cors dotenv
+
+   (If you are on Node 16 or lower, also install node-fetch:
+    npm install node-fetch@2
+    And require it in server.js if needed.)
+
+2) Set up your Google API key:
+
+   - Create a file named ".env" inside /google-ai-backend
+   - Add this line (replace with your actual key):
+
+     GOOGLE_API_KEY=YOUR_REAL_GOOGLE_API_KEY_HERE
+
+   IMPORTANT: For safety, do NOT commit your real key to Git.
+   In the repository, keep something like:
+   GOOGLE_API_KEY=YOUR_GOOGLE_API_KEY_HERE
+
+3) Start the backend server:
+
+   From /google-ai-backend, run:
+
+   node server.js
+
+   You should see something like:
+   "Server running on port 4000"
+   or
+   "Server running on http://localhost:4000"
+
+
+Expose Backend with Ngrok
+-------------------------
+You need Ngrok so your phone (on WiFi) can reach the backend.
+
+1) In a second terminal, from the same folder /google-ai-backend, run:
+
+   ngrok.exe http 4000
+
+2) Ngrok will show a public HTTPS URL, e.g.:
+
+   https://something-1234.ngrok-free.app
+
+3) Copy that URL.
+
+4) In the frontend file:
+   /app/(tabs)/index.tsx
+
+   Update the constant at the top:
+
+   const NGROK_URL = "https://your-ngrok-url-here";
+
+   Example:
+
+   const NGROK_URL = "https://something-1234.ngrok-free.app";
+
+   NOTE: Ngrok URL CHANGES every time you restart ngrok (unless you use a reserved domain),
+   so you must update NGROK_URL whenever you get a new URL.
+
+
+Frontend Setup (Expo / React Native)
+------------------------------------
+Directory: project root (where package.json is, and /app folder exists)
+
+1) Install frontend dependencies (run once per machine):
+
+   npm install
+
+2) Install required Expo libraries:
+
+   npx expo install \
+     expo-clipboard \
+     expo-file-system \
+     expo-sharing \
+     expo-print \
+     @react-native-community/datetimepicker
+
+   (expo-file-system is used via the legacy import:
+    import * as FileSystem from "expo-file-system/legacy"; )
+
+3) Make sure you have the Expo Go app on your phone.
+
+
+Running the Project (Full Flow)
+-------------------------------
+Use these commands each time you want to run the project:
+
+A) Start backend (Node server)   [terminal 1, in /google-ai-backend]
+
+   cd google-ai-backend
+   node server.js
+
+B) Start Ngrok for backend       [terminal 2, in /google-ai-backend]
+
+   cd google-ai-backend
+   ngrok.exe http 4000
+
+   - Copy the https://... ngrok URL it shows
+   - Paste that URL into:
+     /app/(tabs)/index.tsx
+
+     Update:
+       const NGROK_URL = "https://YOUR_CURRENT_NGROK_URL_HERE";
+
+C) Start Expo app                [terminal 3, in project root]
+
+   cd <project-root>
+   npx expo start --tunnel
+
+   - Scan the QR code with Expo Go (Android)
+     or with the Camera app (iOS, then open in Expo Go).
+
+   - Make sure your phone and the PC are on the same network
+     so Expo can reach the development server.
+
+
+Using the App
+-------------
+1) Open the app in Expo Go on your phone.
+2) Fill in ALL required fields:
+   - School
+   - Teacher
+   - Grade Level (dropdown with Elementary, JHS, SHS options)
+   - Subject
+   - Quarter (dropdown)
+   - Week (dropdown)
+   - Day (dropdown)
+   - Date (date picker)
+   - Learning competencies (MELCs)
+   - Topic / Lesson Title
+   - Time Allotted (dropdown)
+   - Resources Available
+   - Previous Lesson
+
+3) The "Generate Lesson Plan" button becomes clickable only after all fields are filled.
+
+4) After generation:
+   - The lesson plan appears as plain text starting with:
+     HEADER INFORMATION
+   - No Markdown **bold**, no leading "Here is a detailed..." text.
+
+5) Actions available:
+   - Copy to Clipboard:
+     Copies the entire lesson plan text so you can paste it elsewhere.
+   - Save as Word File:
+     Saves an .rtf file that can be opened and edited in Microsoft Word or other editors.
+   - Save as PDF:
+     Generates a PDF file via Expo Print and opens the sharing dialog so you can save or share it.
+
+
+Moving to Another Computer
+--------------------------
+When you clone this repository on another machine:
+
+1) Clone the repo:
+
+   git clone <your-repo-url>
+   cd <your-project-folder>
+
+2) Re-install dependencies:
+
+   Backend:
+     cd google-ai-backend
+     npm install
+
+   Frontend:
+     cd <project-root>
+     npm install
+     npx expo install \
+       expo-clipboard \
+       expo-file-system \
+       expo-sharing \
+       expo-print \
+       @react-native-community/datetimepicker
+
+3) Re-create the .env file in /google-ai-backend with YOUR real Google API key:
+
+   GOOGLE_API_KEY=YOUR_REAL_GOOGLE_API_KEY_HERE
+
+4) Run the same start commands:
+
+   In /google-ai-backend:
+     node server.js
+
+   In project root (second terminal):
+     ngrok.exe http 4000
+
+   Update NGROK_URL in /app/(tabs)/index.tsx
+
+   In project root (third terminal):
+     npx expo start --tunnel
+
+
+Security Notes
+--------------
+- Never commit your real GOOGLE_API_KEY to Git.
+  Use a placeholder like "YOUR_GOOGLE_API_KEY_HERE" in code before pushing.
+- Keep your .env file in .gitignore so it is not tracked in the repository.

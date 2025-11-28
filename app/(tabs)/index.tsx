@@ -1,12 +1,14 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Picker } from "@react-native-picker/picker";
 import * as Clipboard from "expo-clipboard";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
+  Pressable,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -16,7 +18,7 @@ import {
   View,
 } from "react-native";
 
-const NGROK_URL = "https://unascendent-underfoot-tessa.ngrok-free.dev"; // <-- keep your working URL here
+const NGROK_URL = "https://unascendent-underfoot-tessa.ngrok-free.dev"; // <-- your working URL
 
 export default function LessonPlanScreen() {
   // HEADER INFORMATION
@@ -47,6 +49,7 @@ export default function LessonPlanScreen() {
   const [lessonPlan, setLessonPlan] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // ✅ ALL fields are required
   const allRequiredFilled = [
     school,
     teacher,
@@ -55,11 +58,13 @@ export default function LessonPlanScreen() {
     quarter,
     week,
     day,
+    date,
     learningCompetencies,
     topicTitle,
     timeAllotted,
+    resourcesAvailable,
+    previousLesson,
   ].every((v) => v.trim().length > 0);
-
 
   const handleGenerate = async () => {
     if (!allRequiredFilled || loading) return;
@@ -67,7 +72,6 @@ export default function LessonPlanScreen() {
     setLoading(true);
     setLessonPlan("");
 
-    // Build a structured description to send to the backend
     const lessonInfo = `
 HEADER INFORMATION
 - School: ${school}
@@ -87,8 +91,8 @@ CONTENT
 
 ADDITIONAL INFORMATION
 - Time Allotted: ${timeAllotted}
-- Resources Available: ${resourcesAvailable || "Not specified"}
-- Previous Lesson: ${previousLesson || "Not specified"}
+- Resources Available: ${resourcesAvailable}
+- Previous Lesson: ${previousLesson}
     `.trim();
 
     const prompt = `
@@ -187,7 +191,7 @@ ${lessonInfo}
               label="School"
               value={school}
               onChangeText={setSchool}
-              placeholder="e.g., Sample National High School"
+              placeholder="e.g., Sample Elementary School"
             />
 
             <Field
@@ -197,17 +201,36 @@ ${lessonInfo}
               placeholder="e.g., Juan Dela Cruz"
             />
 
-            {/* Grade Level DROPDOWN */}
+            {/* Grade Level DROPDOWN – grouped by level */}
             <DropdownField
               label="Grade Level"
               selectedValue={gradeLevel}
               onValueChange={setGradeLevel}
               placeholder="Select grade level"
               options={[
+                { label: "Elementary", value: "header_elem", isHeader: true },
+                { label: "Grade 1", value: "Grade 1" },
+                { label: "Grade 2", value: "Grade 2" },
+                { label: "Grade 3", value: "Grade 3" },
+                { label: "Grade 4", value: "Grade 4" },
+                { label: "Grade 5", value: "Grade 5" },
+                { label: "Grade 6", value: "Grade 6" },
+
+                {
+                  label: "Junior High School",
+                  value: "header_jhs",
+                  isHeader: true,
+                },
                 { label: "Grade 7", value: "Grade 7" },
                 { label: "Grade 8", value: "Grade 8" },
                 { label: "Grade 9", value: "Grade 9" },
                 { label: "Grade 10", value: "Grade 10" },
+
+                {
+                  label: "Senior High School",
+                  value: "header_shs",
+                  isHeader: true,
+                },
                 { label: "Grade 11", value: "Grade 11" },
                 { label: "Grade 12", value: "Grade 12" },
               ]}
@@ -261,7 +284,7 @@ ${lessonInfo}
               ]}
             />
 
-            {/* DATE PICKER */}
+            {/* DATE PICKER (required) */}
             <View style={styles.fieldContainer}>
               <Text style={styles.label}>Date</Text>
               <TouchableOpacity
@@ -271,7 +294,9 @@ ${lessonInfo}
               >
                 <Text
                   style={
-                    date ? styles.dateText : [styles.dateText, styles.datePlaceholder]
+                    date
+                      ? styles.dateText
+                      : [styles.dateText, styles.datePlaceholder]
                   }
                 >
                   {date || "Tap to select date"}
@@ -315,7 +340,7 @@ ${lessonInfo}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Additional Information</Text>
 
-            {/* Time Allotted DROPDOWN */}
+            {/* Time Allotted DROPDOWN – with 120 minutes */}
             <DropdownField
               label="Time Allotted"
               selectedValue={timeAllotted}
@@ -326,6 +351,7 @@ ${lessonInfo}
                 { label: "45 minutes", value: "45 minutes" },
                 { label: "60 minutes", value: "60 minutes" },
                 { label: "90 minutes", value: "90 minutes" },
+                { label: "120 minutes", value: "120 minutes" },
               ]}
             />
 
@@ -361,6 +387,13 @@ ${lessonInfo}
             )}
           </TouchableOpacity>
 
+          {/* Helper text when disabled */}
+          {!allRequiredFilled && !loading && (
+            <Text style={styles.helperText}>
+              Please complete all fields above to enable lesson plan generation.
+            </Text>
+          )}
+
           {/* Output */}
           <View style={[styles.card, { marginBottom: 32 }]}>
             <Text style={styles.sectionTitle}>Generated Lesson Plan</Text>
@@ -388,7 +421,7 @@ ${lessonInfo}
   );
 }
 
-// Reusable text field component
+// ---- Reusable text field ----
 type FieldProps = {
   label: string;
   value: string;
@@ -419,13 +452,19 @@ function Field({
   );
 }
 
-// New dropdown component
+// ---- Dropdown component with headers ----
+type DropdownOption = {
+  label: string;
+  value: string;
+  isHeader?: boolean;
+};
+
 type DropdownFieldProps = {
   label: string;
   selectedValue: string;
   onValueChange: (value: string) => void;
   placeholder?: string;
-  options: { label: string; value: string }[];
+  options: DropdownOption[];
 };
 
 function DropdownField({
@@ -435,32 +474,131 @@ function DropdownField({
   placeholder,
   options,
 }: DropdownFieldProps) {
+  const [visible, setVisible] = useState(false);
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  const openDropdown = () => {
+    setVisible(true);
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const closeDropdown = () => {
+    Animated.parallel([
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+      Animated.timing(translateY, {
+        toValue: 10,
+        duration: 140,
+        useNativeDriver: true,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setVisible(false);
+    });
+  };
+
+  const handleSelect = (opt: DropdownOption) => {
+    if (opt.isHeader) return; // headers are not selectable
+    onValueChange(opt.value);
+    closeDropdown();
+  };
+
+  const displayText = selectedValue || placeholder || "Select an option";
+  const isPlaceholder = !selectedValue;
+
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label}</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={selectedValue || ""}
-          onValueChange={(val) => {
-            if (val !== "") onValueChange(val);
-          }}
-          dropdownIconColor="#9ca3af"
-        >
-          <Picker.Item
-            label={placeholder || "Select an option"}
-            value=""
-            color="#6b7280"
-          />
-          {options.map((opt) => (
-            <Picker.Item
-              key={opt.value}
-              label={opt.label}
-              value={opt.value}
-              // color="#f9fafb"
-            />
-          ))}
-        </Picker>
-      </View>
+
+      {/* Closed state with arrow */}
+      <TouchableOpacity
+        style={styles.dropdownButton}
+        onPress={openDropdown}
+        activeOpacity={0.7}
+      >
+        <View style={styles.dropdownInner}>
+          <Text
+            style={
+              isPlaceholder
+                ? styles.dropdownPlaceholderText
+                : styles.dropdownValueText
+            }
+            numberOfLines={1}
+          >
+            {displayText}
+          </Text>
+          <Text style={styles.dropdownArrow}>▾</Text>
+        </View>
+      </TouchableOpacity>
+
+      {/* Modal dropdown */}
+      <Modal
+        visible={visible}
+        transparent
+        animationType="none"
+        onRequestClose={closeDropdown}
+      >
+        <Pressable style={styles.dropdownOverlay} onPress={closeDropdown}>
+          <Animated.View
+            style={[
+              styles.dropdownModalContent,
+              {
+                opacity,
+                transform: [{ translateY }],
+              },
+            ]}
+          >
+            <Text style={styles.dropdownModalTitle}>{label}</Text>
+            <ScrollView style={styles.dropdownScroll} nestedScrollEnabled>
+              {options.map((opt) => {
+                if (opt.isHeader) {
+                  return (
+                    <View key={opt.value} style={styles.dropdownHeader}>
+                      <Text style={styles.dropdownHeaderText}>{opt.label}</Text>
+                    </View>
+                  );
+                }
+
+                const isSelected = opt.value === selectedValue;
+                return (
+                  <TouchableOpacity
+                    key={opt.value}
+                    style={[
+                      styles.dropdownOption,
+                      isSelected && styles.dropdownOptionSelected,
+                    ]}
+                    onPress={() => handleSelect(opt)}
+                    activeOpacity={0.7}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownOptionText,
+                        isSelected && styles.dropdownOptionTextSelected,
+                      ]}
+                    >
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </Animated.View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -476,9 +614,10 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingBottom: 24,
+    paddingTop: 44,
   },
   header: {
-    paddingVertical: 16,
+    paddingBottom: 16,
   },
   headerTitle: {
     fontSize: 22,
@@ -525,13 +664,6 @@ const styles = StyleSheet.create({
     minHeight: 70,
     textAlignVertical: "top",
   },
-  pickerContainer: {
-    borderRadius: 10,
-    backgroundColor: "#0b1120",
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    overflow: "hidden",
-  },
   button: {
     marginTop: 16,
     borderRadius: 999,
@@ -547,6 +679,12 @@ const styles = StyleSheet.create({
     color: "#ecfeff",
     fontWeight: "600",
     fontSize: 15,
+  },
+  helperText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "#f97373", // soft red
+    textAlign: "center",
   },
   outputText: {
     marginTop: 4,
@@ -589,5 +727,88 @@ const styles = StyleSheet.create({
   datePlaceholder: {
     color: "#6b7280",
     fontStyle: "italic",
+  },
+
+  // Dropdown styles
+  dropdownButton: {
+    borderRadius: 10,
+    backgroundColor: "#0b1120",
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#1f2937",
+    justifyContent: "center",
+  },
+  dropdownInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dropdownValueText: {
+    fontSize: 14,
+    color: "#f9fafb",
+    flex: 1,
+    marginRight: 8,
+  },
+  dropdownPlaceholderText: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontStyle: "italic",
+    flex: 1,
+    marginRight: 8,
+  },
+  dropdownArrow: {
+    fontSize: 14,
+    color: "#9ca3af",
+  },
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+  },
+  dropdownModalContent: {
+    backgroundColor: "#020617",
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    maxHeight: "70%",
+    borderWidth: 1,
+    borderColor: "#1f2937",
+  },
+  dropdownModalTitle: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#e5e7eb",
+    marginBottom: 8,
+  },
+  dropdownScroll: {
+    marginTop: 4,
+  },
+  dropdownHeader: {
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    marginTop: 4,
+  },
+  dropdownHeaderText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#9ca3af",
+    textTransform: "uppercase",
+  },
+  dropdownOption: {
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+  },
+  dropdownOptionSelected: {
+    backgroundColor: "#065f46",
+  },
+  dropdownOptionText: {
+    fontSize: 14,
+    color: "#f9fafb",
+  },
+  dropdownOptionTextSelected: {
+    fontWeight: "700",
   },
 });

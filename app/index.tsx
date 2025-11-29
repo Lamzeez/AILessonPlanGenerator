@@ -1,16 +1,16 @@
 import { useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Image,
-    Modal,
-    Pressable,
-    SafeAreaView,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  Animated,
+  Image,
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function WelcomeScreen() {
@@ -92,7 +92,7 @@ export default function WelcomeScreen() {
         {/* Hero card */}
         <View style={styles.heroCard}>
           <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>For Teachers ✨</Text>
+            <Text style={styles.heroBadgeText}>For Teachers and Aspiring Teachers ✨</Text>
           </View>
 
           <Text style={styles.heroTitle}>

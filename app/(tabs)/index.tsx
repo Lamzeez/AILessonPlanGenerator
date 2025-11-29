@@ -363,20 +363,29 @@ ${lessonInfo}
       await FileSystem.writeAsStringAsync(fileUri, rtfContent, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-
+//>>>>>>>>>>>>>>>>>>>
       const isAvailable = await Sharing.isAvailableAsync();
-      if (!isAvailable) {
-        Alert.alert(
-          "File saved",
-          `RTF file saved to: ${fileUri}\nYou can open it with Word or any document editor.`
-        );
-        return;
-      }
+if (!isAvailable) {
+  Alert.alert(
+    "File saved",
+    `RTF file saved to: ${fileUri}\nYou can open it with Word or any document editor.`
+  );
+  return;
+}
 
-      await Sharing.shareAsync(fileUri, {
-        mimeType: "application/rtf",
-        dialogTitle: "Save or share lesson plan",
-      });
+    // ✅ Fix: Copy to a temporary public file so Android keeps your filename
+    const tempUri = FileSystem.cacheDirectory + fileName;
+    await FileSystem.copyAsync({
+      from: fileUri,
+      to: tempUri,
+    });
+
+    // Now share the temporary file — Android keeps the real filename!
+    await Sharing.shareAsync(tempUri, {
+      mimeType: "application/rtf",
+      dialogTitle: "Save or share lesson plan",
+    });
+
     } catch (error) {
       console.error("Save as Word failed:", error);
       Alert.alert(

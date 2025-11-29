@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  Keyboard, // 👈 added
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -701,6 +702,9 @@ if (!isAvailable) {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "on-drag" : "none"} // 👈 dismiss on drag (iOS)
+          onScrollBeginDrag={Keyboard.dismiss}                              // 👈 dismiss when user starts scrolling
+          onMomentumScrollBegin={Keyboard.dismiss}                          // 👈 extra safety for some scroll behaviors
         >
           {/* Header */}
           <View style={styles.header}>

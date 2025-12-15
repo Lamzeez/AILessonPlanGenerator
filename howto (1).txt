@@ -1,0 +1,130 @@
+AI Lesson Plan Generator – How To Run & Setup
+============================================
+
+This project is a mobile AI-powered lesson plan generator built with **Expo (React Native)** and a **Node.js + Express backend** using **Google Gemini** via the Generative Language API. It includes:
+
+- Dropdowns for grade level, quarter, week, day, date, and time allotted  
+- Plain-text lesson plan output (no markdown / asterisks)  
+- Copy to clipboard  
+- Save as Word (.rtf)  
+- Save as PDF  
+- Templates (save & load common setups, with duplicate protection)  
+- Lesson plan history  
+- Clear All button  
+- Delete buttons for templates and history entries  
+
+The main frontend screen lives in:  
+
+- `app/(tabs)/index.tsx` – **AI Lesson Plan Screen**
+
+------------------------------------------------
+1. Prerequisites
+------------------------------------------------
+
+Make sure you have:
+
+1. **Node.js 18+**  
+2. **npm**  
+3. **Git**  
+4. **Expo tooling**  
+5. **Expo Go app** on your phone  
+6. **ngrok account + auth token**  
+7. **Google AI Studio API Key (Gemini)**  
+
+------------------------------------------------
+2. Project Structure
+------------------------------------------------
+
+- `google-ai-backend/` – backend (Express, Gemini)
+- `app/(tabs)/index.tsx` – main frontend screen
+- `howto.txt` – this file
+
+------------------------------------------------
+3. Backend Setup (`/google-ai-backend`)
+------------------------------------------------
+
+Initialize if needed:
+
+    npm init -y
+
+Install dependencies:
+
+    npm install express cors dotenv
+
+Create `.env`:
+
+    GOOGLE_API_KEY=YOUR_GOOGLE_API_KEY_HERE
+    PORT=4000
+
+Run backend:
+
+    node server.js
+
+------------------------------------------------
+4. Exposing Backend via ngrok
+------------------------------------------------
+
+Run ngrok:
+
+    ngrok http 4000
+
+Copy the HTTPS forwarding URL and paste it into:
+
+    const NGROK_URL = "https://your-ngrok-url.ngrok-free.app";
+
+------------------------------------------------
+5. Frontend Setup (Expo app)
+------------------------------------------------
+
+Install frontend packages:
+
+    npx expo install @react-native-community/datetimepicker
+    npx expo install expo-clipboard
+    npx expo install expo-file-system expo-sharing expo-print
+    npx expo install @react-native-async-storage/async-storage
+
+Start Expo:
+
+    npx expo start --tunnel
+
+------------------------------------------------
+6. App Features Overview
+------------------------------------------------
+
+Includes:
+
+- Full input system  
+- AI generation logic  
+- Templates & history using AsyncStorage  
+- Save as RTF  
+- Save as PDF  
+- Copy to clipboard  
+- Clear All  
+- Delete template / history items  
+
+------------------------------------------------
+7. Typical Run Workflow (3 terminals)
+------------------------------------------------
+
+Terminal 1 – Backend:
+
+    cd google-ai-backend
+    node server.js
+
+Terminal 2 – ngrok:
+
+    ngrok http 4000
+
+Terminal 3 – Expo:
+
+    npx expo start --tunnel
+
+------------------------------------------------
+8. Notes for GitHub
+------------------------------------------------
+
+- Never commit your real API key  
+- Replace API key with placeholder before pushing  
+
+This file is meant to help you quickly set up and run the full AI Lesson Plan Generator system with all backend and Expo packages included.
+

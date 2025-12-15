@@ -1,0 +1,67 @@
+Steps to Install & Run the AI Lesson Plan Generator
+====================================================
+
+This file lists ONLY the packages required on your computer and the exact commands to run the project.
+
+----------------------------------------------------
+1. REQUIRED INSTALLATIONS
+----------------------------------------------------
+
+Install the following on your local machine:
+
+1. Node.js (version 18 or higher)
+2. npm (comes with Node)
+3. Git
+4. Expo Go app (on your phone — Android/iOS)
+5. ngrok (https://ngrok.com)
+6. Google AI Studio API Key (Gemini)
+
+----------------------------------------------------
+2. BACKEND DEPENDENCIES (Node.js)
+----------------------------------------------------
+
+In the backend folder:
+
+    cd google-ai-backend
+    npm install express cors dotenv
+
+----------------------------------------------------
+3. FRONTEND DEPENDENCIES (Expo / React Native)
+----------------------------------------------------
+
+From the project root, install required Expo packages:
+
+    npx expo install @react-native-community/datetimepicker
+    npx expo install expo-clipboard
+    npx expo install expo-file-system expo-sharing expo-print
+    npx expo install @react-native-async-storage/async-storage
+
+----------------------------------------------------
+4. RUNNING THE PROJECT (3-Terminal Setup)
+----------------------------------------------------
+
+--- Terminal 1: Start backend server ---
+
+    cd google-ai-backend
+    node server.js
+
+--- Terminal 2: Start ngrok ---
+
+    ngrok http 4000
+
+Copy the HTTPS forwarding URL and paste it into:
+
+    const NGROK_URL = "https://your-ngrok-url.ngrok-free.app";
+
+--- Terminal 3: Start Expo App ---
+
+    cd <project-root>
+    npx expo start --tunnel
+
+Open Expo Go on your mobile phone → scan QR code → app loads.
+
+----------------------------------------------------
+DONE
+----------------------------------------------------
+
+This file contains only the required packages and steps needed to run the project.

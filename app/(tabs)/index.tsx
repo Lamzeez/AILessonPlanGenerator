@@ -5,12 +5,12 @@ import * as FileSystem from "expo-file-system/legacy";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Animated,
-  Keyboard, // 👈 added
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -24,7 +24,10 @@ import {
   View,
 } from "react-native";
 
-const NGROK_URL = "https://unascendent-underfoot-tessa.ngrok-free.dev"; // <-- your working URL
+import { AppTheme, getAppTheme, ThemeMode } from "../../constants/theme";
+
+const NGROK_URL = "https://unascendent-underfoot-tessa.ngrok-free.dev";
+const THEME_KEY = "@appThemeMode";
 
 // ---- Types for templates & history ----
 type LessonTemplate = {
@@ -42,7 +45,7 @@ type LessonTemplate = {
   previousLesson: string;
   planStyle: string;
   language: string;
-  topicTitle: string; // ✅ include topic in template
+  topicTitle: string;
 };
 
 type HistoryItem = {
@@ -56,6 +59,29 @@ type HistoryItem = {
 };
 
 export default function LessonPlanScreen() {
+  // ✅ Theme (persisted)
+  const [themeMode, setThemeMode] = useState<ThemeMode>("dark");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const saved = await AsyncStorage.getItem(THEME_KEY);
+        if (saved === "light" || saved === "dark") setThemeMode(saved);
+      } catch {}
+    })();
+  }, []);
+
+  const theme = useMemo(() => getAppTheme(themeMode), [themeMode]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  const toggleTheme = async () => {
+    const next: ThemeMode = themeMode === "dark" ? "light" : "dark";
+    setThemeMode(next);
+    try {
+      await AsyncStorage.setItem(THEME_KEY, next);
+    } catch {}
+  };
+
   // HEADER INFORMATION
   const [school, setSchool] = useState("");
   const [teacher, setTeacher] = useState("");
@@ -88,7 +114,6 @@ export default function LessonPlanScreen() {
   const [lessonPlan, setLessonPlan] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // NEW: generation status for success message
   const [generationStatus, setGenerationStatus] = useState<
     "idle" | "success" | "error"
   >("idle");
@@ -99,7 +124,6 @@ export default function LessonPlanScreen() {
   const [templatesVisible, setTemplatesVisible] = useState(false);
   const [historyVisible, setHistoryVisible] = useState(false);
 
-  // ✅ ALL core fields are required (style & language have defaults)
   const allRequiredFilled = [
     school,
     teacher,
@@ -121,18 +145,14 @@ export default function LessonPlanScreen() {
     const loadData = async () => {
       try {
         const savedTemplates = await AsyncStorage.getItem("@lessonTemplates");
-        if (savedTemplates) {
-          setTemplates(JSON.parse(savedTemplates));
-        }
+        if (savedTemplates) setTemplates(JSON.parse(savedTemplates));
       } catch (err) {
         console.error("Failed to load templates:", err);
       }
 
       try {
         const savedHistory = await AsyncStorage.getItem("@lessonHistory");
-        if (savedHistory) {
-          setHistoryItems(JSON.parse(savedHistory));
-        }
+        if (savedHistory) setHistoryItems(JSON.parse(savedHistory));
       } catch (err) {
         console.error("Failed to load history:", err);
       }
@@ -224,7 +244,7 @@ Content rules:
 Style preferences:
 - Lesson plan style: ${planStyle}.
 - Language preference: ${language}.
-  If "Bilingual (English + Filipino)" is selected, combine English and Filipino in a natural classroom-appropriate way (for example, English instructions with Filipino explanations or key terms).
+  If "Bilingual (English + Filipino)" is selected, combine English and Filipino in a natural classroom-appropriate way.
 
 Here is the lesson information provided by the teacher:
 
@@ -235,41 +255,26 @@ ${lessonInfo}
       const response = await fetch(`${NGROK_URL}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: prompt,
-        }),
+        body: JSON.stringify({ message: prompt }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status}`);
-      }
+      if (!response.ok) throw new Error(`Server error: ${response.status}`);
 
       const data = await response.json();
-
       let reply =
-        data.reply ??
-        "Sorry, I couldn't generate a lesson plan. Please try again.";
+        data.reply ?? "Sorry, I couldn't generate a lesson plan. Please try again.";
 
-      // --- Post-process to enforce plain-text, no intro, no asterisks ---
-      reply = reply.replace(/\*/g, ""); // Remove all asterisks
-
+      reply = reply.replace(/\*/g, "");
       const headerIndex = reply.indexOf("HEADER INFORMATION");
-      if (headerIndex > -1) {
-        reply = reply.slice(headerIndex);
-      }
-
+      if (headerIndex > -1) reply = reply.slice(headerIndex);
       reply = reply.trim();
 
-      // 🔹 Remove any trailing "(End of Lesson Plan)" style markers
       const endPatterns = [
         /\(?\s*end of lesson plan\s*\)?\.?$/i,
         /\(?\s*end of the lesson plan\s*\)?\.?$/i,
         /\(?\s*this concludes the lesson plan\s*\)?\.?$/i,
       ];
-
-      for (const pattern of endPatterns) {
-        reply = reply.replace(pattern, "").trim();
-      }
+      for (const pattern of endPatterns) reply = reply.replace(pattern, "").trim();
 
       setLessonPlan(reply);
       setGenerationStatus("success");
@@ -297,7 +302,6 @@ ${lessonInfo}
     }
   };
 
-  // 🔹 Build a base file name from school/subject/grade/date
   const buildBaseFileName = () => {
     const safePart = (value: string | undefined, fallback: string) => {
       const trimmed = (value || "").trim();
@@ -313,7 +317,6 @@ ${lessonInfo}
     return raw.replace(/[^\w.-]/g, "_");
   };
 
-  // 🔹 Save as Word-editable file (.rtf) with header + better file name
   const handleSaveAsWord = async () => {
     if (!lessonPlan) {
       Alert.alert("No content", "Generate a lesson plan first.");
@@ -321,7 +324,6 @@ ${lessonInfo}
     }
 
     try {
-      // Header block
       const headerLines: string[] = [];
       if (school) headerLines.push(`School: ${school}`);
       if (teacher) headerLines.push(`Teacher: ${teacher}`);
@@ -329,17 +331,11 @@ ${lessonInfo}
       if (gradeLevel) headerLines.push(`Grade Level: ${gradeLevel}`);
       if (date) headerLines.push(`Date: ${date}`);
 
-      const headerText =
-        headerLines.length > 0 ? headerLines.join("\n") + "\n\n" : "";
-
+      const headerText = headerLines.length > 0 ? headerLines.join("\n") + "\n\n" : "";
       const fullText = headerText + lessonPlan;
 
-      // Escape RTF special characters
       const escapeForRtf = (text: string) =>
-        text
-          .replace(/\\/g, "\\\\")
-          .replace(/{/g, "\\{")
-          .replace(/}/g, "\\}");
+        text.replace(/\\/g, "\\\\").replace(/{/g, "\\{").replace(/}/g, "\\}");
 
       const escaped = escapeForRtf(fullText);
       const rtfBody = escaped.replace(/\n/g, "\\par\n");
@@ -348,14 +344,10 @@ ${lessonInfo}
       const baseName = buildBaseFileName();
       const fileName = `${baseName}.rtf`;
 
-      const baseDir =
-        FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
+      const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
 
       if (!baseDir) {
-        Alert.alert(
-          "Error",
-          "No writable directory available on this platform."
-        );
+        Alert.alert("Error", "No writable directory available on this platform.");
         return;
       }
 
@@ -364,39 +356,26 @@ ${lessonInfo}
       await FileSystem.writeAsStringAsync(fileUri, rtfContent, {
         encoding: FileSystem.EncodingType.UTF8,
       });
-//>>>>>>>>>>>>>>>>>>>
+
       const isAvailable = await Sharing.isAvailableAsync();
-if (!isAvailable) {
-  Alert.alert(
-    "File saved",
-    `RTF file saved to: ${fileUri}\nYou can open it with Word or any document editor.`
-  );
-  return;
-}
+      if (!isAvailable) {
+        Alert.alert("File saved", `RTF file saved to: ${fileUri}`);
+        return;
+      }
 
-    // ✅ Fix: Copy to a temporary public file so Android keeps your filename
-    const tempUri = FileSystem.cacheDirectory + fileName;
-    await FileSystem.copyAsync({
-      from: fileUri,
-      to: tempUri,
-    });
+      const tempUri = FileSystem.cacheDirectory + fileName;
+      await FileSystem.copyAsync({ from: fileUri, to: tempUri });
 
-    // Now share the temporary file — Android keeps the real filename!
-    await Sharing.shareAsync(tempUri, {
-      mimeType: "application/rtf",
-      dialogTitle: "Save or share lesson plan",
-    });
-
+      await Sharing.shareAsync(tempUri, {
+        mimeType: "application/rtf",
+        dialogTitle: "Save or share lesson plan",
+      });
     } catch (error) {
       console.error("Save as Word failed:", error);
-      Alert.alert(
-        "Error",
-        "Unable to save the lesson plan as a Word file. Please try again."
-      );
+      Alert.alert("Error", "Unable to save the lesson plan as a Word file. Please try again.");
     }
   };
 
-  // 🔹 Save as PDF via expo-print, with header + nicer headings + better file name
   const handleSaveAsPDF = async () => {
     if (!lessonPlan) {
       Alert.alert("No content", "Generate a lesson plan first.");
@@ -405,82 +384,53 @@ if (!isAvailable) {
 
     try {
       const escapeHtml = (text: string) =>
-        text
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
+        text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      // Header at the top (school, teacher, subject, grade, date)
       const headerTitle = school || "Lesson Plan";
       const teacherLine =
         teacher || subject
-          ? `${teacher ? `Teacher: ${teacher}` : ""}${
-              teacher && subject ? " • " : ""
-            }${subject ? `Subject: ${subject}` : ""}`
+          ? `${teacher ? `Teacher: ${teacher}` : ""}${teacher && subject ? " • " : ""}${
+              subject ? `Subject: ${subject}` : ""
+            }`
           : "";
       const gradeDateLine =
         gradeLevel || date
-          ? `${gradeLevel ? `Grade Level: ${gradeLevel}` : ""}${
-              gradeLevel && date ? " • " : ""
-            }${date ? `${date}` : ""}`
+          ? `${gradeLevel ? `Grade Level: ${gradeLevel}` : ""}${gradeLevel && date ? " • " : ""}${
+              date ? `${date}` : ""
+            }`
           : "";
 
       const headerHtml = `
         <div style="text-align:center; margin-bottom:16px;">
-          <div style="font-size:16pt; font-weight:bold;">
-            ${escapeHtml(headerTitle)}
-          </div>
-          ${
-            teacherLine
-              ? `<div style="font-size:11pt; margin-top:4px;">${escapeHtml(
-                  teacherLine
-                )}</div>`
-              : ""
-          }
-          ${
-            gradeDateLine
-              ? `<div style="font-size:11pt; margin-top:2px;">${escapeHtml(
-                  gradeDateLine
-                )}</div>`
-              : ""
-          }
+          <div style="font-size:16pt; font-weight:bold;">${escapeHtml(headerTitle)}</div>
+          ${teacherLine ? `<div style="font-size:11pt; margin-top:4px;">${escapeHtml(teacherLine)}</div>` : ""}
+          ${gradeDateLine ? `<div style="font-size:11pt; margin-top:2px;">${escapeHtml(gradeDateLine)}</div>` : ""}
         </div>
         <hr style="margin:12px 0; border:0; border-top:1px solid #e5e7eb;" />
       `;
 
-      // Slight formatting for section headings
       const lines = lessonPlan.split(/\r?\n/);
-
       const bodyHtml = lines
         .map((line) => {
           const trimmed = line.trim();
-          if (!trimmed) {
-            return "<div style='height:6px;'></div>";
-          }
-
+          if (!trimmed) return "<div style='height:6px;'></div>";
           if (trimmed.toUpperCase() === "HEADER INFORMATION") {
-            return `<div style="font-size:14pt; font-weight:bold; margin-top:12px; margin-bottom:4px;">
-              ${escapeHtml(trimmed)}
-            </div>`;
+            return `<div style="font-size:14pt; font-weight:bold; margin-top:12px; margin-bottom:4px;">${escapeHtml(
+              trimmed
+            )}</div>`;
           }
-
           if (/^(I|V|X)+\.\s/.test(trimmed)) {
-            return `<div style="font-weight:bold; margin-top:10px; margin-bottom:4px;">
-              ${escapeHtml(trimmed)}
-            </div>`;
+            return `<div style="font-weight:bold; margin-top:10px; margin-bottom:4px;">${escapeHtml(
+              trimmed
+            )}</div>`;
           }
-
-          return `<div style="font-size:12pt; margin-bottom:2px;">
-            ${escapeHtml(line)}
-          </div>`;
+          return `<div style="font-size:12pt; margin-bottom:2px;">${escapeHtml(line)}</div>`;
         })
         .join("");
 
       const html = `
         <html>
-          <head>
-            <meta charset="utf-8" />
-          </head>
+          <head><meta charset="utf-8" /></head>
           <body style="font-family: -apple-system, system-ui, sans-serif; font-size: 12pt; line-height: 1.4; padding: 24px;">
             ${headerHtml}
             ${bodyHtml}
@@ -493,18 +443,13 @@ if (!isAvailable) {
       const baseName = buildBaseFileName();
       const pdfName = `${baseName}.pdf`;
 
-      const baseDir =
-        FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
-
+      const baseDir = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
       let finalUri = uri;
 
       if (baseDir) {
         const newUri = baseDir + pdfName;
         try {
-          await FileSystem.moveAsync({
-            from: uri,
-            to: newUri,
-          });
+          await FileSystem.moveAsync({ from: uri, to: newUri });
           finalUri = newUri;
         } catch (moveError) {
           console.warn("Failed to move PDF to nicer file name:", moveError);
@@ -513,10 +458,7 @@ if (!isAvailable) {
 
       const isAvailable = await Sharing.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert(
-          "PDF created",
-          `PDF file created at: ${finalUri}\nYou can open it with a PDF viewer.`
-        );
+        Alert.alert("PDF created", `PDF file created at: ${finalUri}`);
         return;
       }
 
@@ -526,14 +468,10 @@ if (!isAvailable) {
       });
     } catch (error) {
       console.error("Save as PDF failed:", error);
-      Alert.alert(
-        "Error",
-        "Unable to save the lesson plan as a PDF file. Please try again."
-      );
+      Alert.alert("Error", "Unable to save the lesson plan as a PDF file. Please try again.");
     }
   };
 
-  // Date picker handler
   const handleDateChange = (_: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
@@ -546,7 +484,6 @@ if (!isAvailable) {
     }
   };
 
-  // ---- Clear All: reset all fields + output (templates/history stay) ----
   const handleClearAll = () => {
     setSchool("");
     setTeacher("");
@@ -567,7 +504,6 @@ if (!isAvailable) {
     setGenerationStatus("idle");
   };
 
-  // ---- Templates: save & apply ----
   const handleSaveTemplate = async () => {
     if (!school && !subject && !gradeLevel && !topicTitle) {
       Alert.alert(
@@ -579,7 +515,6 @@ if (!isAvailable) {
 
     const normalize = (value: string) => value.trim().toLowerCase();
 
-    // ✅ Prevent duplicates: same school + subject + grade level + topic
     const exists = templates.some((t) => {
       return (
         normalize(t.school) === normalize(school) &&
@@ -597,9 +532,9 @@ if (!isAvailable) {
       return;
     }
 
-    const name = `${school || "School"} | ${subject || "Subject"} | ${
-      gradeLevel || "Grade"
-    }${topicTitle ? ` | ${topicTitle}` : ""}`;
+    const name = `${school || "School"} | ${subject || "Subject"} | ${gradeLevel || "Grade"}${
+      topicTitle ? ` | ${topicTitle}` : ""
+    }`;
 
     const newTemplate: LessonTemplate = {
       id: Date.now().toString(),
@@ -639,7 +574,7 @@ if (!isAvailable) {
     setPreviousLesson(tpl.previousLesson || "");
     setPlanStyle(tpl.planStyle || "DepEd Format (Philippines)");
     setLanguage(tpl.language || "English");
-    setTopicTitle(tpl.topicTitle || ""); // ✅ topic comes back from template too
+    setTopicTitle(tpl.topicTitle || "");
   };
 
   const handleSelectTemplate = (tpl: LessonTemplate) => {
@@ -653,43 +588,34 @@ if (!isAvailable) {
     setHistoryVisible(false);
   };
 
-  // 🔹 delete handlers for templates & history
   const handleDeleteTemplate = (id: string) => {
-    Alert.alert(
-      "Delete template",
-      "Are you sure you want to delete this template? This action cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const updated = templates.filter((t) => t.id !== id);
-            setTemplates(updated);
-            await saveTemplatesToStorage(updated);
-          },
+    Alert.alert("Delete template", "Are you sure you want to delete this template? This action cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const updated = templates.filter((t) => t.id !== id);
+          setTemplates(updated);
+          await saveTemplatesToStorage(updated);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   const handleDeleteHistoryItem = (id: string) => {
-    Alert.alert(
-      "Delete history item",
-      "Are you sure you want to delete this lesson plan from history?",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            const updated = historyItems.filter((h) => h.id !== id);
-            setHistoryItems(updated);
-            await saveHistoryToStorage(updated);
-          },
+    Alert.alert("Delete history item", "Are you sure you want to delete this lesson plan from history?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Delete",
+        style: "destructive",
+        onPress: async () => {
+          const updated = historyItems.filter((h) => h.id !== id);
+          setHistoryItems(updated);
+          await saveHistoryToStorage(updated);
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -702,17 +628,25 @@ if (!isAvailable) {
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "on-drag" : "none"} // 👈 dismiss on drag (iOS)
-          onScrollBeginDrag={Keyboard.dismiss}                              // 👈 dismiss when user starts scrolling
-          onMomentumScrollBegin={Keyboard.dismiss}                          // 👈 extra safety for some scroll behaviors
+          keyboardDismissMode={Platform.OS === "ios" ? "on-drag" : "none"}
+          onScrollBeginDrag={Keyboard.dismiss}
+          onMomentumScrollBegin={Keyboard.dismiss}
         >
           {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>AI Lesson Plan Generator</Text>
-            <Text style={styles.headerSubtitle}>
-              Fill in the lesson details and let Google AI generate a complete
-              lesson plan for you.
-            </Text>
+          <View style={styles.headerRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.headerTitle}>AI Lesson Plan Generator</Text>
+              <Text style={styles.headerSubtitle}>
+                Fill in the lesson details and let Google AI generate a complete lesson plan for you.
+              </Text>
+            </View>
+
+            <TouchableOpacity style={styles.themeToggle} onPress={toggleTheme} activeOpacity={0.75}>
+              <Text style={styles.themeToggleText}>
+                {themeMode === "dark" ? "☀️" : "🌙"}{" "}
+                {themeMode === "dark" ? "Light" : "Dark"}
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* HEADER INFORMATION */}
@@ -720,6 +654,8 @@ if (!isAvailable) {
             <Text style={styles.sectionTitle}>Header Information</Text>
 
             <Field
+              styles={styles}
+              theme={theme}
               label="School"
               value={school}
               onChangeText={setSchool}
@@ -727,14 +663,16 @@ if (!isAvailable) {
             />
 
             <Field
+              styles={styles}
+              theme={theme}
               label="Teacher"
               value={teacher}
               onChangeText={setTeacher}
               placeholder="e.g., Juan Dela Cruz"
             />
 
-            {/* Grade Level DROPDOWN – grouped by level */}
             <DropdownField
+              styles={styles}
               label="Grade Level"
               selectedValue={gradeLevel}
               onValueChange={setGradeLevel}
@@ -748,35 +686,29 @@ if (!isAvailable) {
                 { label: "Grade 5", value: "Grade 5" },
                 { label: "Grade 6", value: "Grade 6" },
 
-                {
-                  label: "Junior High School",
-                  value: "header_jhs",
-                  isHeader: true,
-                },
+                { label: "Junior High School", value: "header_jhs", isHeader: true },
                 { label: "Grade 7", value: "Grade 7" },
                 { label: "Grade 8", value: "Grade 8" },
                 { label: "Grade 9", value: "Grade 9" },
                 { label: "Grade 10", value: "Grade 10" },
 
-                {
-                  label: "Senior High School",
-                  value: "header_shs",
-                  isHeader: true,
-                },
+                { label: "Senior High School", value: "header_shs", isHeader: true },
                 { label: "Grade 11", value: "Grade 11" },
                 { label: "Grade 12", value: "Grade 12" },
               ]}
             />
 
             <Field
+              styles={styles}
+              theme={theme}
               label="Subject"
               value={subject}
               onChangeText={setSubject}
               placeholder="e.g., Science"
             />
 
-            {/* Quarter DROPDOWN */}
             <DropdownField
+              styles={styles}
               label="Quarter"
               selectedValue={quarter}
               onValueChange={setQuarter}
@@ -789,8 +721,8 @@ if (!isAvailable) {
               ]}
             />
 
-            {/* Week DROPDOWN */}
             <DropdownField
+              styles={styles}
               label="Week"
               selectedValue={week}
               onValueChange={setWeek}
@@ -801,8 +733,8 @@ if (!isAvailable) {
               }))}
             />
 
-            {/* Day DROPDOWN */}
             <DropdownField
+              styles={styles}
               label="Day"
               selectedValue={day}
               onValueChange={setDay}
@@ -816,21 +748,11 @@ if (!isAvailable) {
               ]}
             />
 
-            {/* DATE PICKER (required) */}
+            {/* DATE PICKER */}
             <View style={styles.fieldContainer}>
               <Text style={styles.label}>Date</Text>
-              <TouchableOpacity
-                style={styles.dateInput}
-                onPress={() => setShowDatePicker(true)}
-                activeOpacity={0.7}
-              >
-                <Text
-                  style={
-                    date
-                      ? styles.dateText
-                      : [styles.dateText, styles.datePlaceholder]
-                  }
-                >
+              <TouchableOpacity style={styles.dateInput} onPress={() => setShowDatePicker(true)} activeOpacity={0.7}>
+                <Text style={date ? styles.dateText : [styles.dateText, styles.datePlaceholder]}>
                   {date || "Tap to select date"}
                 </Text>
               </TouchableOpacity>
@@ -849,6 +771,8 @@ if (!isAvailable) {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Objectives</Text>
             <Field
+              styles={styles}
+              theme={theme}
               label="Learning competencies (MELCs)"
               value={learningCompetencies}
               onChangeText={setLearningCompetencies}
@@ -861,6 +785,8 @@ if (!isAvailable) {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Content</Text>
             <Field
+              styles={styles}
+              theme={theme}
               label="Topic / Lesson Title"
               value={topicTitle}
               onChangeText={setTopicTitle}
@@ -868,12 +794,12 @@ if (!isAvailable) {
             />
           </View>
 
-          {/* ADDITIONAL INFORMATION + AI SETTINGS */}
+          {/* ADDITIONAL */}
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Additional Information</Text>
 
-            {/* Time Allotted DROPDOWN – with 120 minutes */}
             <DropdownField
+              styles={styles}
               label="Time Allotted"
               selectedValue={timeAllotted}
               onValueChange={setTimeAllotted}
@@ -888,6 +814,8 @@ if (!isAvailable) {
             />
 
             <Field
+              styles={styles}
+              theme={theme}
               label="Resources Available"
               value={resourcesAvailable}
               onChangeText={setResourcesAvailable}
@@ -895,6 +823,8 @@ if (!isAvailable) {
               multiline
             />
             <Field
+              styles={styles}
+              theme={theme}
               label="Previous Lesson"
               value={previousLesson}
               onChangeText={setPreviousLesson}
@@ -902,34 +832,23 @@ if (!isAvailable) {
               multiline
             />
 
-            {/* AI Output Settings */}
             <View style={{ marginTop: 4 }}>
               <DropdownField
+                styles={styles}
                 label="Lesson Plan Style"
                 selectedValue={planStyle}
                 onValueChange={setPlanStyle}
                 placeholder="Select style"
                 options={[
-                  {
-                    label: "DepEd Format (Philippines)",
-                    value: "DepEd Format (Philippines)",
-                  },
-                  {
-                    label: "Detailed (very explicit steps)",
-                    value: "Detailed (very explicit steps)",
-                  },
-                  {
-                    label: "Concise (short but complete)",
-                    value: "Concise (short but complete)",
-                  },
-                  {
-                    label: "Activity-heavy (more student tasks)",
-                    value: "Activity-heavy (more student tasks)",
-                  },
+                  { label: "DepEd Format (Philippines)", value: "DepEd Format (Philippines)" },
+                  { label: "Detailed (very explicit steps)", value: "Detailed (very explicit steps)" },
+                  { label: "Concise (short but complete)", value: "Concise (short but complete)" },
+                  { label: "Activity-heavy (more student tasks)", value: "Activity-heavy (more student tasks)" },
                 ]}
               />
 
               <DropdownField
+                styles={styles}
                 label="Language"
                 selectedValue={language}
                 onValueChange={setLanguage}
@@ -937,10 +856,7 @@ if (!isAvailable) {
                 options={[
                   { label: "English", value: "English" },
                   { label: "Filipino", value: "Filipino" },
-                  {
-                    label: "Bilingual (English + Filipino)",
-                    value: "Bilingual (English + Filipino)",
-                  },
+                  { label: "Bilingual (English + Filipino)", value: "Bilingual (English + Filipino)" },
                 ]}
               />
             </View>
@@ -950,11 +866,7 @@ if (!isAvailable) {
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Templates & History</Text>
             <View style={styles.actionsRow}>
-              <TouchableOpacity
-                style={styles.templateButton}
-                onPress={handleSaveTemplate}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.templateButton} onPress={handleSaveTemplate} activeOpacity={0.7}>
                 <Text style={styles.templateButtonText}>Save as Template</Text>
               </TouchableOpacity>
 
@@ -963,24 +875,14 @@ if (!isAvailable) {
                 onPress={() => setTemplatesVisible(true)}
                 activeOpacity={0.7}
               >
-                <Text style={styles.templateSecondaryButtonText}>
-                  Load Template
-                </Text>
+                <Text style={styles.templateSecondaryButtonText}>Load Template</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.historyButton}
-                onPress={() => setHistoryVisible(true)}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.historyButton} onPress={() => setHistoryVisible(true)} activeOpacity={0.7}>
                 <Text style={styles.historyButtonText}>View History</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity
-                style={styles.clearButton}
-                onPress={handleClearAll}
-                activeOpacity={0.7}
-              >
+              <TouchableOpacity style={styles.clearButton} onPress={handleClearAll} activeOpacity={0.7}>
                 <Text style={styles.clearButtonText}>Clear All</Text>
               </TouchableOpacity>
             </View>
@@ -988,32 +890,25 @@ if (!isAvailable) {
 
           {/* Generate Button */}
           <TouchableOpacity
-            style={[
-              styles.button,
-              (!allRequiredFilled || loading) && styles.buttonDisabled,
-            ]}
+            style={[styles.button, (!allRequiredFilled || loading) && styles.buttonDisabled]}
             onPress={handleGenerate}
             disabled={!allRequiredFilled || loading}
           >
             {loading ? (
-              <ActivityIndicator size="small" />
+              <ActivityIndicator size="small" color={theme.primaryText} />
             ) : (
               <Text style={styles.buttonText}>Generate Lesson Plan</Text>
             )}
           </TouchableOpacity>
 
-          {/* Helper text when disabled */}
           {!allRequiredFilled && !loading && (
             <Text style={styles.helperText}>
               Please complete all fields above to enable lesson plan generation.
             </Text>
           )}
 
-          {/* ✅ Success message after generation */}
           {generationStatus === "success" && lessonPlan !== "" && (
-            <Text style={styles.successMessage}>
-              Your lesson plan has been generated successfully!
-            </Text>
+            <Text style={styles.successMessage}>Your lesson plan has been generated successfully!</Text>
           )}
 
           {/* Output */}
@@ -1024,37 +919,22 @@ if (!isAvailable) {
                 <Text style={styles.outputText}>{lessonPlan}</Text>
 
                 <View style={styles.actionsRow}>
-                  <TouchableOpacity
-                    style={styles.copyButton}
-                    onPress={handleCopy}
-                    activeOpacity={0.7}
-                  >
+                  <TouchableOpacity style={styles.copyButton} onPress={handleCopy} activeOpacity={0.7}>
                     <Text style={styles.copyButtonText}>Copy to Clipboard</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.saveButton}
-                    onPress={handleSaveAsWord}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.saveButtonText}>
-                      Save as Word File
-                    </Text>
+                  <TouchableOpacity style={styles.saveButton} onPress={handleSaveAsWord} activeOpacity={0.7}>
+                    <Text style={styles.saveButtonText}>Save as Word File</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.savePdfButton}
-                    onPress={handleSaveAsPDF}
-                    activeOpacity={0.7}
-                  >
+                  <TouchableOpacity style={styles.savePdfButton} onPress={handleSaveAsPDF} activeOpacity={0.7}>
                     <Text style={styles.savePdfButtonText}>Save as PDF</Text>
                   </TouchableOpacity>
                 </View>
               </>
             ) : (
               <Text style={styles.placeholderOutput}>
-                The generated lesson plan will appear here after you click
-                "Generate Lesson Plan".
+                The generated lesson plan will appear here after you click "Generate Lesson Plan".
               </Text>
             )}
           </View>
@@ -1068,16 +948,10 @@ if (!isAvailable) {
           onRequestClose={() => setTemplatesVisible(false)}
         >
           <View style={styles.fullScreenOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setTemplatesVisible(false)}
-            />
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setTemplatesVisible(false)} />
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Saved Templates</Text>
-              <ScrollView
-                style={{ maxHeight: "70%", marginTop: 8 }}
-                nestedScrollEnabled
-              >
+              <ScrollView style={{ maxHeight: "70%", marginTop: 8 }} nestedScrollEnabled>
                 {templates.length === 0 ? (
                   <Text style={styles.modalEmptyText}>
                     No templates yet. Fill the form and tap "Save as Template".
@@ -1086,27 +960,16 @@ if (!isAvailable) {
                   templates.map((tpl) => (
                     <View key={tpl.id} style={styles.modalItem}>
                       <View style={styles.modalItemHeaderRow}>
-                        <TouchableOpacity
-                          style={{ flex: 1 }}
-                          onPress={() => handleSelectTemplate(tpl)}
-                          activeOpacity={0.7}
-                        >
+                        <TouchableOpacity style={{ flex: 1 }} onPress={() => handleSelectTemplate(tpl)} activeOpacity={0.7}>
                           <Text style={styles.modalItemTitle}>{tpl.name}</Text>
                           <Text style={styles.modalItemSubtitle}>
                             {tpl.subject} • {tpl.gradeLevel}
-                            {tpl.topicTitle
-                              ? ` • Topic: ${tpl.topicTitle}`
-                              : ""}
+                            {tpl.topicTitle ? ` • Topic: ${tpl.topicTitle}` : ""}
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                          onPress={() => handleDeleteTemplate(tpl.id)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.modalDeleteButtonText}>
-                            Delete
-                          </Text>
+                        <TouchableOpacity onPress={() => handleDeleteTemplate(tpl.id)} activeOpacity={0.7}>
+                          <Text style={styles.modalDeleteButtonText}>Delete</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1118,23 +981,12 @@ if (!isAvailable) {
         </Modal>
 
         {/* History Modal */}
-        <Modal
-          visible={historyVisible}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setHistoryVisible(false)}
-        >
+        <Modal visible={historyVisible} transparent animationType="fade" onRequestClose={() => setHistoryVisible(false)}>
           <View style={styles.fullScreenOverlay}>
-            <Pressable
-              style={StyleSheet.absoluteFill}
-              onPress={() => setHistoryVisible(false)}
-            />
-          <View style={styles.modalCard}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={() => setHistoryVisible(false)} />
+            <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Lesson Plan History</Text>
-              <ScrollView
-                style={{ maxHeight: "70%", marginTop: 8 }}
-                nestedScrollEnabled
-              >
+              <ScrollView style={{ maxHeight: "70%", marginTop: 8 }} nestedScrollEnabled>
                 {historyItems.length === 0 ? (
                   <Text style={styles.modalEmptyText}>
                     No history yet. Generate a lesson plan to add entries.
@@ -1143,27 +995,17 @@ if (!isAvailable) {
                   historyItems.map((item) => (
                     <View key={item.id} style={styles.modalItem}>
                       <View style={styles.modalItemHeaderRow}>
-                        <TouchableOpacity
-                          style={{ flex: 1 }}
-                          onPress={() => handleSelectHistoryItem(item)}
-                          activeOpacity={0.7}
-                        >
+                        <TouchableOpacity style={{ flex: 1 }} onPress={() => handleSelectHistoryItem(item)} activeOpacity={0.7}>
                           <Text style={styles.modalItemTitle}>
                             {item.subject} • {item.gradeLevel}
                           </Text>
                           <Text style={styles.modalItemSubtitle}>
-                            {item.topicTitle || "No topic"} |{" "}
-                            {item.date || "No date"}
+                            {item.topicTitle || "No topic"} | {item.date || "No date"}
                           </Text>
                         </TouchableOpacity>
 
-                        <TouchableOpacity
-                          onPress={() => handleDeleteHistoryItem(item.id)}
-                          activeOpacity={0.7}
-                        >
-                          <Text style={styles.modalDeleteButtonText}>
-                            Delete
-                          </Text>
+                        <TouchableOpacity onPress={() => handleDeleteHistoryItem(item.id)} activeOpacity={0.7}>
+                          <Text style={styles.modalDeleteButtonText}>Delete</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -1179,7 +1021,11 @@ if (!isAvailable) {
 }
 
 // ---- Reusable text field ----
+type StylesType = ReturnType<typeof createStyles>;
+
 type FieldProps = {
+  styles: StylesType;
+  theme: AppTheme;
   label: string;
   value: string;
   onChangeText: (text: string) => void;
@@ -1187,13 +1033,7 @@ type FieldProps = {
   multiline?: boolean;
 };
 
-function Field({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  multiline,
-}: FieldProps) {
+function Field({ styles, theme, label, value, onChangeText, placeholder, multiline }: FieldProps) {
   return (
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label}</Text>
@@ -1202,7 +1042,7 @@ function Field({
         value={value}
         onChangeText={onChangeText}
         placeholder={placeholder}
-        placeholderTextColor="#6b7280"
+        placeholderTextColor={theme.placeholder}
         multiline={multiline}
       />
     </View>
@@ -1217,6 +1057,7 @@ type DropdownOption = {
 };
 
 type DropdownFieldProps = {
+  styles: StylesType;
   label: string;
   selectedValue: string;
   onValueChange: (value: string) => void;
@@ -1224,13 +1065,7 @@ type DropdownFieldProps = {
   options: DropdownOption[];
 };
 
-function DropdownField({
-  label,
-  selectedValue,
-  onValueChange,
-  placeholder,
-  options,
-}: DropdownFieldProps) {
+function DropdownField({ styles, label, selectedValue, onValueChange, placeholder, options }: DropdownFieldProps) {
   const [visible, setVisible] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(10)).current;
@@ -1238,38 +1073,22 @@ function DropdownField({
   const openDropdown = () => {
     setVisible(true);
     Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 1,
-        duration: 160,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 0,
-        duration: 160,
-        useNativeDriver: true,
-      }),
+      Animated.timing(opacity, { toValue: 1, duration: 160, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 0, duration: 160, useNativeDriver: true }),
     ]).start();
   };
 
   const closeDropdown = () => {
     Animated.parallel([
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 140,
-        useNativeDriver: true,
-      }),
-      Animated.timing(translateY, {
-        toValue: 10,
-        duration: 140,
-        useNativeDriver: true,
-      }),
+      Animated.timing(opacity, { toValue: 0, duration: 140, useNativeDriver: true }),
+      Animated.timing(translateY, { toValue: 10, duration: 140, useNativeDriver: true }),
     ]).start(({ finished }) => {
       if (finished) setVisible(false);
     });
   };
 
   const handleSelect = (opt: DropdownOption) => {
-    if (opt.isHeader) return; // headers are not selectable
+    if (opt.isHeader) return;
     onValueChange(opt.value);
     closeDropdown();
   };
@@ -1281,19 +1100,10 @@ function DropdownField({
     <View style={styles.fieldContainer}>
       <Text style={styles.label}>{label}</Text>
 
-      {/* Closed state with arrow */}
-      <TouchableOpacity
-        style={styles.dropdownButton}
-        onPress={openDropdown}
-        activeOpacity={0.7}
-      >
+      <TouchableOpacity style={styles.dropdownButton} onPress={openDropdown} activeOpacity={0.7}>
         <View style={styles.dropdownInner}>
           <Text
-            style={
-              isPlaceholder
-                ? styles.dropdownPlaceholderText
-                : styles.dropdownValueText
-            }
+            style={isPlaceholder ? styles.dropdownPlaceholderText : styles.dropdownValueText}
             numberOfLines={1}
           >
             {displayText}
@@ -1302,21 +1112,12 @@ function DropdownField({
         </View>
       </TouchableOpacity>
 
-      {/* Modal dropdown */}
-      <Modal
-        visible={visible}
-        transparent
-        animationType="none"
-        onRequestClose={closeDropdown}
-      >
+      <Modal visible={visible} transparent animationType="none" onRequestClose={closeDropdown}>
         <Pressable style={styles.dropdownOverlay} onPress={closeDropdown}>
           <Animated.View
             style={[
               styles.dropdownModalContent,
-              {
-                opacity,
-                transform: [{ translateY }],
-              },
+              { opacity, transform: [{ translateY }] },
             ]}
           >
             <Text style={styles.dropdownModalTitle}>{label}</Text>
@@ -1334,19 +1135,11 @@ function DropdownField({
                 return (
                   <TouchableOpacity
                     key={opt.value}
-                    style={[
-                      styles.dropdownOption,
-                      isSelected && styles.dropdownOptionSelected,
-                    ]}
+                    style={[styles.dropdownOption, isSelected && styles.dropdownOptionSelected]}
                     onPress={() => handleSelect(opt)}
                     activeOpacity={0.7}
                   >
-                    <Text
-                      style={[
-                        styles.dropdownOptionText,
-                        isSelected && styles.dropdownOptionTextSelected,
-                      ]}
-                    >
+                    <Text style={[styles.dropdownOptionText, isSelected && styles.dropdownOptionTextSelected]}>
                       {opt.label}
                     </Text>
                   </TouchableOpacity>
@@ -1360,349 +1153,381 @@ function DropdownField({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: "#050816",
-  },
-  container: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 55,
-    paddingTop: 65,
-  },
-  header: {
-    paddingBottom: 16,
-  },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "#9ca3af",
-    marginTop: 6,
-  },
-  card: {
-    backgroundColor: "#020617",
-    borderRadius: 16,
-    padding: 14,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-  },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#e5e7eb",
-    marginBottom: 8,
-  },
-  fieldContainer: {
-    marginBottom: 10,
-  },
-  label: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#9ca3af",
-    marginBottom: 4,
-  },
-  input: {
-    borderRadius: 10,
-    backgroundColor: "#0b1120",
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    color: "#f9fafb",
-    fontSize: 14,
-  },
-  inputMultiline: {
-    minHeight: 70,
-    textAlignVertical: "top",
-  },
-  button: {
-    marginTop: 16,
-    borderRadius: 999,
-    paddingVertical: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#10b981",
-  },
-  buttonDisabled: {
-    opacity: 0.6,
-  },
-  buttonText: {
-    color: "#ecfeff",
-    fontWeight: "600",
-    fontSize: 15,
-  },
-  helperText: {
-    marginTop: 6,
-    fontSize: 12,
-    color: "#f97373",
-    textAlign: "center",
-  },
-  successMessage: {
-    marginTop: 8,
-    fontSize: 13,
-    color: "#4ade80",
-    textAlign: "center",
-    fontWeight: "600",
-  },
-  outputText: {
-    marginTop: 4,
-    fontSize: 14,
-    color: "#f9fafb",
-    lineHeight: 20,
-  },
-  placeholderOutput: {
-    marginTop: 4,
-    fontSize: 13,
-    color: "#6b7280",
-    fontStyle: "italic",
-  },
-  actionsRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: 12,
-    gap: 8,
-  },
-  copyButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#10b981",
-  },
-  copyButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#10b981",
-  },
-  saveButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#3b82f6",
-  },
-  saveButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#bfdbfe",
-  },
-  savePdfButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#f97316",
-  },
-  savePdfButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#fed7aa",
-  },
-  dateInput: {
-    borderRadius: 10,
-    backgroundColor: "#0b1120",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-  },
-  dateText: {
-    fontSize: 14,
-    color: "#f9fafb",
-  },
-  datePlaceholder: {
-    color: "#6b7280",
-    fontStyle: "italic",
-  },
+function createStyles(theme: AppTheme) {
+  return StyleSheet.create({
+    safe: {
+      flex: 1,
+      backgroundColor: theme.background,
+    },
+    container: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingBottom: 55,
+      paddingTop: 65,
+    },
 
-  // Dropdown styles
-  dropdownButton: {
-    borderRadius: 10,
-    backgroundColor: "#0b1120",
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-    justifyContent: "center",
-  },
-  dropdownInner: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  dropdownValueText: {
-    fontSize: 14,
-    color: "#f9fafb",
-    flex: 1,
-    marginRight: 8,
-  },
-  dropdownPlaceholderText: {
-    fontSize: 14,
-    color: "#6b7280",
-    fontStyle: "italic",
-    flex: 1,
-    marginRight: 8,
-  },
-  dropdownArrow: {
-    fontSize: 14,
-    color: "#9ca3af",
-  },
-  dropdownOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  dropdownModalContent: {
-    backgroundColor: "#020617",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    maxHeight: "70%",
-    borderWidth: 1,
-    borderColor: "#1f2937",
-  },
-  dropdownModalTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#e5e7eb",
-    marginBottom: 8,
-  },
-  dropdownScroll: {
-    marginTop: 4,
-  },
-  dropdownHeader: {
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    marginTop: 4,
-  },
-  dropdownHeaderText: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#9ca3af",
-    textTransform: "uppercase",
-  },
-  dropdownOption: {
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-    borderRadius: 8,
-  },
-  dropdownOptionSelected: {
-    backgroundColor: "#065f46",
-  },
-  dropdownOptionText: {
-    fontSize: 14,
-    color: "#f9fafb",
-  },
-  dropdownOptionTextSelected: {
-    fontWeight: "700",
-  },
+    headerRow: {
+      paddingBottom: 16,
+      flexDirection: "row",
+      alignItems: "flex-start",
+      justifyContent: "space-between",
+      gap: 10,
+    },
+    headerTitle: {
+      fontSize: 22,
+      fontWeight: "700",
+      color: theme.text,
+    },
+    headerSubtitle: {
+      fontSize: 13,
+      color: theme.textMuted,
+      marginTop: 6,
+    },
+    themeToggle: {
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.border,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      backgroundColor: theme.card,
+      alignSelf: "flex-start",
+    },
+    themeToggleText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.text,
+    },
 
-  // Templates & history & clear
-  templateButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#22c55e",
-  },
-  templateButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#bbf7d0",
-  },
-  templateSecondaryButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#38bdf8",
-  },
-  templateSecondaryButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#e0f2fe",
-  },
-  historyButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#a855f7",
-  },
-  historyButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#f3e8ff",
-  },
-  clearButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: "#ef4444",
-  },
-  clearButtonText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#fecaca",
-  },
+    card: {
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      padding: 14,
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    sectionTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.text,
+      marginBottom: 8,
+    },
+    fieldContainer: {
+      marginBottom: 10,
+    },
+    label: {
+      fontSize: 12,
+      fontWeight: "600",
+      color: theme.label,
+      marginBottom: 4,
+    },
+    input: {
+      borderRadius: 10,
+      backgroundColor: theme.inputBg,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      color: theme.text,
+      fontSize: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    inputMultiline: {
+      minHeight: 70,
+      textAlignVertical: "top",
+    },
 
-  // Full-screen modals
-  fullScreenOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    paddingHorizontal: 24,
-  },
-  modalCard: {
-    backgroundColor: "#020617",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: "#1f2937",
-  },
-  modalTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#e5e7eb",
-  },
-  modalEmptyText: {
-    fontSize: 13,
-    color: "#9ca3af",
-    marginTop: 8,
-  },
-  modalItem: {
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#1f2937",
-  },
-  modalItemTitle: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#f9fafb",
-  },
-  modalItemSubtitle: {
-    fontSize: 12,
-    color: "#9ca3af",
-    marginTop: 2,
-  },
-  modalItemHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  modalDeleteButtonText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#fca5a5",
-  },
-});
+    button: {
+      marginTop: 16,
+      borderRadius: 999,
+      paddingVertical: 12,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: theme.primary,
+    },
+    buttonDisabled: {
+      opacity: 0.6,
+    },
+    buttonText: {
+      color: theme.primaryText,
+      fontWeight: "700",
+      fontSize: 15,
+    },
+
+    helperText: {
+      marginTop: 6,
+      fontSize: 12,
+      color: theme.danger,
+      textAlign: "center",
+    },
+    successMessage: {
+      marginTop: 8,
+      fontSize: 13,
+      color: theme.success,
+      textAlign: "center",
+      fontWeight: "700",
+    },
+
+    outputText: {
+      marginTop: 4,
+      fontSize: 14,
+      color: theme.text,
+      lineHeight: 20,
+    },
+    placeholderOutput: {
+      marginTop: 4,
+      fontSize: 13,
+      color: theme.placeholder,
+      fontStyle: "italic",
+    },
+
+    actionsRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      marginTop: 12,
+      gap: 8,
+    },
+
+    copyButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accentGreen,
+      backgroundColor: "transparent",
+    },
+    copyButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.accentGreenText,
+    },
+
+    saveButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accentBlue,
+      backgroundColor: "transparent",
+    },
+    saveButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.accentBlueText,
+    },
+
+    savePdfButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accentOrange,
+      backgroundColor: "transparent",
+    },
+    savePdfButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.accentOrangeText,
+    },
+
+    dateInput: {
+      borderRadius: 10,
+      backgroundColor: theme.inputBg,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    dateText: {
+      fontSize: 14,
+      color: theme.text,
+    },
+    datePlaceholder: {
+      color: theme.placeholder,
+      fontStyle: "italic",
+    },
+
+    dropdownButton: {
+      borderRadius: 10,
+      backgroundColor: theme.inputBg,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      borderWidth: 1,
+      borderColor: theme.border,
+      justifyContent: "center",
+    },
+    dropdownInner: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    dropdownValueText: {
+      fontSize: 14,
+      color: theme.text,
+      flex: 1,
+      marginRight: 8,
+    },
+    dropdownPlaceholderText: {
+      fontSize: 14,
+      color: theme.placeholder,
+      fontStyle: "italic",
+      flex: 1,
+      marginRight: 8,
+    },
+    dropdownArrow: {
+      fontSize: 14,
+      color: theme.textMuted,
+    },
+    dropdownOverlay: {
+      flex: 1,
+      backgroundColor: theme.overlay,
+      justifyContent: "center",
+      paddingHorizontal: 24,
+    },
+    dropdownModalContent: {
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      maxHeight: "70%",
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    dropdownModalTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.text,
+      marginBottom: 8,
+    },
+    dropdownScroll: {
+      marginTop: 4,
+    },
+    dropdownHeader: {
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      marginTop: 4,
+    },
+    dropdownHeaderText: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: theme.textMuted,
+      textTransform: "uppercase",
+    },
+    dropdownOption: {
+      paddingVertical: 10,
+      paddingHorizontal: 8,
+      borderRadius: 8,
+    },
+    dropdownOptionSelected: {
+      backgroundColor: theme.dropdownSelectedBg,
+    },
+    dropdownOptionText: {
+      fontSize: 14,
+      color: theme.text,
+    },
+    dropdownOptionTextSelected: {
+      fontWeight: "800",
+    },
+
+    templateButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accentGreen,
+    },
+    templateButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.accentGreenText,
+    },
+    templateSecondaryButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accentSky,
+    },
+    templateSecondaryButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.accentSkyText,
+    },
+    historyButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accentPurple,
+    },
+    historyButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.accentPurpleText,
+    },
+    clearButton: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: theme.accentRed,
+    },
+    clearButtonText: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: theme.accentRedText,
+    },
+
+    fullScreenOverlay: {
+      flex: 1,
+      backgroundColor: theme.overlay,
+      justifyContent: "center",
+      paddingHorizontal: 24,
+    },
+    modalCard: {
+      backgroundColor: theme.card,
+      borderRadius: 16,
+      paddingHorizontal: 16,
+      paddingVertical: 14,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    modalTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: theme.text,
+    },
+    modalEmptyText: {
+      fontSize: 13,
+      color: theme.textMuted,
+      marginTop: 8,
+    },
+    modalItem: {
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.border,
+    },
+    modalItemTitle: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.text,
+    },
+    modalItemSubtitle: {
+      fontSize: 12,
+      color: theme.textMuted,
+      marginTop: 2,
+    },
+    modalItemHeaderRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 8,
+    },
+    modalDeleteButtonText: {
+      fontSize: 12,
+      fontWeight: "800",
+      color: theme.accentRedText,
+    },
+  });
+}
